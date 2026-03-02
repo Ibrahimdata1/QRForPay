@@ -8,10 +8,10 @@ VALUES (
   NULL
 );
 
--- 2. Owner profile (placeholder UUID - replace with real auth.users id)
+-- 2. Owner profile (real auth.users id)
 INSERT INTO profiles (id, shop_id, role, full_name)
 VALUES (
-  'aaaa0000-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  '82e5d187-a910-4669-852e-25a90b8c448e',
   '11111111-1111-1111-1111-111111111111',
   'owner',
   'Demo Owner'
@@ -19,7 +19,7 @@ VALUES (
 
 -- Link owner back to shop
 UPDATE shops
-SET owner_id = 'aaaa0000-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+SET owner_id = '82e5d187-a910-4669-852e-25a90b8c448e'
 WHERE id = '11111111-1111-1111-1111-111111111111';
 
 -- 3. Categories
@@ -50,7 +50,7 @@ VALUES (
   'b0000001-0000-0000-0000-000000000001',
   '11111111-1111-1111-1111-111111111111',
   1,
-  'aaaa0000-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  '82e5d187-a910-4669-852e-25a90b8c448e',
   'completed',
   100.00,
   7.00,
