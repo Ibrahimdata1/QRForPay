@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, ScrollView,
   Animated, StyleSheet, Dimensions,
@@ -36,7 +36,10 @@ interface OrderDetailModalProps {
 export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
-  const productMap = Object.fromEntries(products.map((p) => [p.id, p.name]));
+  const productMap = useMemo(
+    () => Object.fromEntries(products.map((p) => [p.id, p.name])),
+    [products]
+  );
 
   useEffect(() => {
     if (visible) {
