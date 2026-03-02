@@ -1,0 +1,134 @@
+import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
+import { supabase } from '../lib/supabase'
+import { Profile, Shop } from '../types'
+
+interface User {
+  id: string
+  email: string
+}
+
+interface AuthState {
+  user: User | null
+  profile: Profile | null
+  shop: Shop | null
+  isLoading: boolean
+  isInitialized: boolean
+
+  initialize: () => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+}
+
+export const useAuthStore = create<AuthState>()(
+  immer((set) => ({
+    user: null,
+    profile: null,
+    shop: null,
+    isLoading: false,
+    isInitialized: false,
+
+    initialize: async () => {
+      set((state) => {
+        state.isLoading = true
+      })
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (session?.user) {
+          const user = { id: session.user.id, email: session.user.email! }
+
+          // Fetch profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+
+          // Fetch shop
+          let shop = null
+          if (profile?.shop_id) {
+            const { data } = await supabase
+              .from('shops')
+              .select('*')
+              .eq('id', profile.shop_id)
+              .single()
+            shop = data
+          }
+
+          set((state) => {
+            state.user = user
+            state.profile = profile as Profile
+            state.shop = shop as Shop
+          })
+        }
+      } catch (err) {
+        // Session expired or invalid - user needs to sign in again
+      } finally {
+        set((state) => {
+          state.isLoading = false
+          state.isInitialized = true
+        })
+      }
+    },
+
+    signIn: async (email: string, password: string) => {
+      set((state) => {
+        state.isLoading = true
+      })
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (error) throw error
+
+        const user = { id: data.user.id, email: data.user.email! }
+
+        // Fetch profile
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profileError) throw profileError
+
+        // Fetch shop
+        let shop = null
+        if (profile?.shop_id) {
+          const { data: shopData } = await supabase
+            .from('shops')
+            .select('*')
+            .eq('id', profile.shop_id)
+            .single()
+          shop = shopData
+        }
+
+        set((state) => {
+          state.user = user
+          state.profile = profile as Profile
+          state.shop = shop as Shop
+          state.isLoading = false
+        })
+      } catch (err) {
+        set((state) => {
+          state.isLoading = false
+        })
+        throw err
+      }
+    },
+
+    signOut: async () => {
+      await supabase.auth.signOut()
+      set((state) => {
+        state.user = null
+        state.profile = null
+        state.shop = null
+      })
+    },
+  }))
+)
