@@ -67,7 +67,7 @@ export default function QRPaymentScreen() {
     <View style={styles.container}>
       <QRPaymentModal
         amount={amount}
-        qrPayload={qrPayload}
+        qrPayload={qrPayload ?? undefined}
         paymentStatus={currentOrder.payment?.status}
         onConfirmed={handleConfirmed}
         onCancel={handleCancel}

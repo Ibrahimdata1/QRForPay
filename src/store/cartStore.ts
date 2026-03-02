@@ -24,7 +24,10 @@ export const useCartStore = create<CartState>()(
       discount: 0,
       taxRate: Config.tax.rate,
 
-      addItem: (product: Product) =>
+      addItem: (product: Product) => {
+        if (product.stock <= 0) {
+          throw new Error('Out of stock')
+        }
         set((state) => {
           const existing = state.items.find(
             (item) => item.product.id === product.id
@@ -39,7 +42,8 @@ export const useCartStore = create<CartState>()(
               subtotal: product.price,
             })
           }
-        }),
+        })
+      },
 
       removeItem: (productId: string) =>
         set((state) => {

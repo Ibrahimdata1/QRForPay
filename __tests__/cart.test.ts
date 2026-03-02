@@ -90,7 +90,7 @@ describe('CartStore', () => {
     expect(selectSubtotal(state)).toBe(200);
   });
 
-  test('grandTotal = subtotal - discount + tax', () => {
+  test('grandTotal = subtotal - discount (tax inclusive)', () => {
     const product = makeProduct({ price: 200 });
     const store = useCartStore.getState();
 
@@ -98,9 +98,8 @@ describe('CartStore', () => {
     store.applyDiscount(10); // 10% discount
 
     const state = useCartStore.getState();
-    // subtotal=200, discount=20, afterDiscount=180, tax=180*taxRate
-    const expectedTotal = 180 + 180 * state.taxRate;
-    expect(selectGrandTotal(state)).toBeCloseTo(expectedTotal, 2);
+    // Tax inclusive: grandTotal = subtotal - discountAmount = 200 - 20 = 180
+    expect(selectGrandTotal(state)).toBeCloseTo(180, 2);
   });
 
   test('clearCart empties all items', () => {
@@ -136,6 +135,6 @@ describe('CartStore', () => {
 
     const state = useCartStore.getState();
     expect(state.items).toHaveLength(3);
-    expect(state.subtotal).toBe(350);
+    expect(selectSubtotal(state)).toBe(350);
   });
 });

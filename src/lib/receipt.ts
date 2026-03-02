@@ -32,24 +32,24 @@ export function formatReceipt(order: OrderWithItems): string {
   lines.push(divider)
 
   for (const item of order.items) {
-    const name = item.product_name.substring(0, 20).padEnd(20)
+    const name = item.product_id.substring(0, 20).padEnd(20)
     const qty = `x${item.quantity}`
     const price = formatThaiCurrency(item.subtotal)
     lines.push(`${name} ${qty.padStart(4)} ${price.padStart(10)}`)
   }
 
   lines.push(divider)
-  lines.push(`Subtotal:      ${formatThaiCurrency(order.subtotal).padStart(16)}`)
+  lines.push(`Subtotal:      ${formatThaiCurrency(order.subtotal ?? 0).padStart(16)}`)
 
   if (order.discount_amount > 0) {
-    lines.push(`Discount (${order.discount_percent}%): -${formatThaiCurrency(order.discount_amount).padStart(14)}`)
+    lines.push(`Discount:      -${formatThaiCurrency(order.discount_amount).padStart(14)}`)
   }
 
-  lines.push(`VAT (7%):      ${formatThaiCurrency(order.tax_amount).padStart(16)}`)
+  lines.push(`VAT (7%):      ${formatThaiCurrency(order.tax_amount ?? 0).padStart(16)}`)
   lines.push(divider)
-  lines.push(`TOTAL:         ${formatThaiCurrency(order.grand_total).padStart(16)}`)
+  lines.push(`TOTAL:         ${formatThaiCurrency(order.total_amount ?? 0).padStart(16)}`)
   lines.push(divider)
-  lines.push(`Payment: ${order.payment_method.toUpperCase()}`)
+  lines.push(`Payment: ${(order.payment_method ?? 'N/A').toUpperCase()}`)
   lines.push('')
   lines.push('       Thank you!')
   lines.push(divider)

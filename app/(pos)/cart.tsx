@@ -59,7 +59,7 @@ export default function CartScreen() {
                 shop.id,
                 profile.id,
                 items,
-                'promptpay',
+                'qr',
                 discount,
                 taxRate
               );

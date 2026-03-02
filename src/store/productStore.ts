@@ -15,6 +15,7 @@ interface ProductState {
   fetchCategories: (shopId: string) => Promise<void>
   setCategory: (categoryId: string | null) => void
   setSearch: (query: string) => void
+  setProducts: (products: Product[]) => void
   deductStock: (productId: string, qty: number) => void
 }
 
@@ -82,6 +83,11 @@ export const useProductStore = create<ProductState>()(
     setSearch: (query: string) =>
       set((state) => {
         state.searchQuery = query
+      }),
+
+    setProducts: (products: Product[]) =>
+      set((state) => {
+        state.products = products
       }),
 
     deductStock: (productId: string, qty: number) =>
