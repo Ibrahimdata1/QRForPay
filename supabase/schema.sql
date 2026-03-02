@@ -1,5 +1,13 @@
 -- EasyShop POS - Database Schema
 -- PostgreSQL / Supabase
+--
+-- ERD (crow's foot notation: ──< = one-to-many)
+--
+--   shops ──< profiles          (profiles.shop_id → shops.id)
+--   shops ──o profiles          (shops.owner_id → profiles.id, one-to-one)
+--   shops ──< categories ──< products   (FK: shop_id, category_id)
+--   shops ──< orders ──< order_items >── products
+--                  └──1 payments        (payments.order_id UNIQUE = one-to-one)
 
 -- ============================================================
 -- 1. Helper: updated_at trigger function
