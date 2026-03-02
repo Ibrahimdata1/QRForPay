@@ -8,16 +8,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
 
 const statusColors: Record<string, string> = {
-  pending: Colors.warning,
-  confirmed: Colors.primary,
-  completed: Colors.secondary,
-  cancelled: Colors.danger,
+  pending: '#F59E0B',
+  confirmed: '#0F766E',
+  completed: '#059669',
+  cancelled: '#EF4444',
 };
 
 const statusLabels: Record<string, string> = {
@@ -62,13 +61,13 @@ export default function OrdersScreen() {
         <View
           style={[
             styles.statusBadge,
-            { backgroundColor: (statusColors[item.status] || Colors.text.light) + '20' },
+            { backgroundColor: (statusColors[item.status] || '#9CA3AF') + '20' },
           ]}
         >
           <Text
             style={[
               styles.statusText,
-              { color: statusColors[item.status] || Colors.text.light },
+              { color: statusColors[item.status] || '#9CA3AF' },
             ]}
           >
             {statusLabels[item.status] || item.status}
@@ -77,20 +76,20 @@ export default function OrdersScreen() {
       </View>
       <View style={styles.orderDetails}>
         <View style={styles.detailRow}>
-          <Ionicons name="calendar-outline" size={16} color={Colors.text.light} />
+          <Ionicons name="calendar-outline" size={16} color={'#9CA3AF'} />
           <Text style={styles.detailText}>{formatDate(item.created_at)}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="time-outline" size={16} color={Colors.text.light} />
+          <Ionicons name="time-outline" size={16} color={'#9CA3AF'} />
           <Text style={styles.detailText}>{formatTime(item.created_at)}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Ionicons name="cube-outline" size={16} color={Colors.text.light} />
+          <Ionicons name="cube-outline" size={16} color={'#9CA3AF'} />
           <Text style={styles.detailText}>{item.items?.length ?? 0} items</Text>
         </View>
         {item.payment_method ? (
           <View style={styles.detailRow}>
-            <Ionicons name="card-outline" size={16} color={Colors.text.light} />
+            <Ionicons name="card-outline" size={16} color={'#9CA3AF'} />
             <Text style={styles.detailText}>
               {methodLabels[item.payment_method] || item.payment_method}
             </Text>
@@ -111,8 +110,8 @@ export default function OrdersScreen() {
             </View>
           ) : (
             <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
-              <Ionicons name="flash-outline" size={12} color={Colors.primary} />
-              <Text style={[styles.confirmBadgeText, { color: Colors.primary }]}>Auto</Text>
+              <Ionicons name="flash-outline" size={12} color={'#0F766E'} />
+              <Text style={[styles.confirmBadgeText, { color: '#0F766E' }]}>Auto</Text>
             </View>
           )}
         </View>
@@ -127,7 +126,7 @@ export default function OrdersScreen() {
   if (isLoading && orders.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={'#0F766E'} />
       </View>
     );
   }
@@ -143,7 +142,7 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={Colors.text.light} />
+            <Ionicons name="receipt-outline" size={64} color={'#9CA3AF'} />
             <Text style={styles.emptyText}>ยังไม่มีรายการ / No orders yet</Text>
           </View>
         }
@@ -155,18 +154,23 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0FDF9',
   },
   listContent: {
     padding: 16,
   },
   orderCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#D1FAE5',
+    shadowColor: '#0F766E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -177,7 +181,7 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#134E4A',
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -201,7 +205,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: '#6B7280',
   },
   confirmationRow: {
     marginBottom: 10,
@@ -219,7 +223,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   confirmBadgeAuto: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#D1FAE5',
   },
   confirmBadgeText: {
     fontSize: 12,
@@ -230,17 +234,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: '#D1FAE5',
     paddingTop: 12,
   },
   totalLabel: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: '#6B7280',
   },
   totalAmount: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.primary,
+    color: '#0F766E',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -249,7 +253,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.light,
+    color: '#9CA3AF',
     marginTop: 12,
   },
 });

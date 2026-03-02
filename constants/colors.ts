@@ -1,19 +1,23 @@
 export const Colors = {
-  primary: '#0066CC',
-  secondary: '#00A651',
-  accent: '#FF6B35',
-  warning: '#FFC107',
-  danger: '#DC3545',
-  background: '#F5F7FA',
+  primary: '#0F766E',
+  primaryDark: '#0D6B63',
+  secondary: '#059669',
+  accent: '#F59E0B',
+  accentLight: '#FEF3C7',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  background: '#F0FDF9',
   surface: '#FFFFFF',
+  border: '#D1FAE5',
+  borderDefault: '#E5E7EB',
+  success: '#10B981',
   text: {
-    primary: '#1A1A2E',
+    primary: '#134E4A',
     secondary: '#6B7280',
     light: '#9CA3AF',
   },
-  border: '#E5E7EB',
   qr: {
     background: '#FFFFFF',
-    foreground: '#0066CC',
+    foreground: '#0F766E',
   },
-};
+} as const;

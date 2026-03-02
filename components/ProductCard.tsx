@@ -1,114 +1,94 @@
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../constants/colors';
-import { Product } from '../src/types';
+import { TouchableOpacity, View, Text, Image } from 'react-native';
+import type { Product } from '../src/types';
+
+const FOOD_EMOJI: Record<string, string> = {
+  'ข้าวผัดกระเพรา': '🍛',
+  'ก๋วยเตี๋ยวต้มยำ': '🍜',
+  'ข้าวมันไก่': '🍗',
+  'ส้มตำไทย': '🥗',
+  'ชาเย็น': '🧋',
+  'กาแฟเย็น': '☕',
+  'น้ำส้มคั้นสด': '🍊',
+  'สบู่เหลว': '🧴',
+  'แปรงสีฟัน': '🪥',
+  'ผงซักฟอก': '🧺',
+};
+
+function getProductEmoji(name: string): string {
+  return FOOD_EMOJI[name] ?? '🛍️';
+}
 
 interface ProductCardProps {
   product: Product;
   onPress: (product: Product) => void;
+  width?: number;
 }
 
-const { width } = Dimensions.get('window');
-const NUM_COLUMNS = width > 600 ? 3 : 2;
-const CARD_WIDTH = (width - 12 * 2 - 8 * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
-
-export function ProductCard({ product, onPress }: ProductCardProps) {
+export function ProductCard({ product, onPress, width }: ProductCardProps) {
   const isOutOfStock = product.stock === 0;
+  const isLowStock = product.stock > 0 && product.stock <= 10;
+  const emoji = getProductEmoji(product.name);
 
   return (
     <TouchableOpacity
-      style={[styles.card, isOutOfStock && styles.cardDisabled]}
       onPress={() => !isOutOfStock && onPress(product)}
-      activeOpacity={isOutOfStock ? 1 : 0.7}
+      activeOpacity={0.85}
+      style={{ width: width ?? '48%' }}
+      className="mb-3"
     >
-      <View style={styles.imagePlaceholder}>
-        <Ionicons
-          name="cube-outline"
-          size={36}
-          color={isOutOfStock ? Colors.text.light : Colors.primary}
-        />
-        {isOutOfStock && (
-          <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockText}>หมดสต็อก</Text>
-          </View>
-        )}
-      </View>
+      <View
+        className={`bg-white rounded-2xl overflow-hidden ${isOutOfStock ? 'opacity-60' : ''}`}
+        style={{
+          shadowColor: '#0F766E',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          elevation: 6,
+        }}
+      >
+        {/* Image / Emoji Area */}
+        <View className="items-center justify-center bg-emerald-50 relative" style={{ height: 120 }}>
+          {product.image_url ? (
+            <Image
+              source={{ uri: product.image_url }}
+              className="w-full h-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={{ fontSize: 56 }}>{emoji}</Text>
+          )}
+          {/* Out of stock overlay */}
+          {isOutOfStock && (
+            <View className="absolute inset-0 bg-black/40 items-center justify-center">
+              <View className="bg-red-500 px-2 py-1 rounded-lg">
+                <Text className="text-white text-xs font-bold">หมดสต็อก</Text>
+              </View>
+            </View>
+          )}
+          {/* Low stock badge */}
+          {isLowStock && !isOutOfStock && (
+            <View className="absolute top-2 right-2 bg-amber-400 px-2 py-0.5 rounded-full">
+              <Text className="text-white text-xs font-bold">เหลือ {product.stock}</Text>
+            </View>
+          )}
+          {/* In stock badge */}
+          {!isOutOfStock && !isLowStock && (
+            <View className="absolute top-2 right-2 bg-emerald-500 px-2 py-0.5 rounded-full">
+              <Text className="text-white text-xs font-bold">มีสินค้า</Text>
+            </View>
+          )}
+        </View>
 
-      <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
-          {product.name}
-        </Text>
-        <View style={styles.bottomRow}>
-          <Text style={styles.price}>฿{product.price.toFixed(0)}</Text>
-          {product.stock > 0 && product.stock <= 10 ? (
-            <Text style={styles.lowStock}>เหลือ {product.stock}</Text>
-          ) : product.stock > 10 ? (
-            <Text style={styles.inStock}>มีสินค้า</Text>
-          ) : null}
+        {/* Info Area */}
+        <View className="px-3 py-2.5">
+          <Text className="text-sm font-semibold text-teal-900 mb-1" numberOfLines={1}>
+            {product.name}
+          </Text>
+          <Text className="text-base font-bold" style={{ color: '#0F766E' }}>
+            ฿{product.price.toFixed(0)}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    width: CARD_WIDTH,
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-  },
-  cardDisabled: {
-    opacity: 0.6,
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: CARD_WIDTH * 0.65,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  outOfStockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  outOfStockText: {
-    color: Colors.surface,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  info: {
-    padding: 10,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: 4,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  lowStock: {
-    fontSize: 11,
-    color: Colors.warning,
-    fontWeight: '600',
-  },
-  inStock: {
-    fontSize: 11,
-    color: Colors.secondary,
-    fontWeight: '500',
-  },
-});

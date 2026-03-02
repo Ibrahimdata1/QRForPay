@@ -117,7 +117,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0FDF9',
   },
   inner: {
     flex: 1,
@@ -132,11 +132,11 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#0F766E',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: Colors.primary,
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -165,10 +165,10 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#D1FAE5',
     paddingHorizontal: 12,
   },
   inputIcon: {
@@ -199,13 +199,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loginButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#0F766E',
     borderRadius: 12,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 32,
-    shadowColor: Colors.primary,
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

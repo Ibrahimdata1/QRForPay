@@ -64,7 +64,7 @@ export default function POSScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={Colors.text.light} style={styles.searchIcon} />
+        <Ionicons name="search" size={20} color={'#9CA3AF'} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="ค้นหาสินค้า / Search products..."
@@ -122,33 +122,38 @@ export default function POSScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0FDF9',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginTop: 12,
-    marginBottom: 8,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginBottom: 4,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: '#D1FAE5',
+    shadowColor: '#0F766E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 44,
+    height: 48,
     fontSize: 15,
-    color: Colors.text.primary,
+    color: '#134E4A',
   },
   productGrid: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
   columnWrapper: {
     justifyContent: 'space-between',
@@ -160,45 +165,45 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.light,
+    color: '#9CA3AF',
     marginTop: 12,
   },
   cartButton: {
     position: 'absolute',
     bottom: 24,
-    left: 24,
-    right: 24,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    height: 56,
+    left: 20,
+    right: 20,
+    backgroundColor: '#0F766E',
+    borderRadius: 18,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowColor: '#0F766E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
   },
   cartButtonText: {
-    color: Colors.surface,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   cartBadge: {
-    backgroundColor: Colors.accent,
+    backgroundColor: '#F59E0B',
     borderRadius: 12,
-    minWidth: 24,
-    height: 24,
+    minWidth: 26,
+    height: 26,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
     paddingHorizontal: 6,
   },
   cartBadgeText: {
-    color: Colors.surface,
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

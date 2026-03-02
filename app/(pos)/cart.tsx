@@ -167,7 +167,7 @@ export default function CartScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0FDF9',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: '#6B7280',
   },
   topBar: {
     flexDirection: 'row',
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   },
   itemCountText: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: '#6B7280',
     fontWeight: '500',
   },
   clearButton: {
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 13,
-    color: Colors.danger,
+    color: '#EF4444',
     fontWeight: '600',
   },
   listContent: {
@@ -221,19 +221,21 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.light,
+    color: '#9CA3AF',
     marginTop: 12,
   },
   summaryContainer: {
-    backgroundColor: Colors.surface,
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 8,
+    borderTopWidth: 1,
+    borderColor: '#D1FAE5',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -243,30 +245,30 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: '#6B7280',
   },
   summaryValue: {
     fontSize: 14,
-    color: Colors.text.primary,
+    color: '#134E4A',
     fontWeight: '500',
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: '#D1FAE5',
     marginVertical: 8,
   },
   totalLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#134E4A',
   },
   totalValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.primary,
+    color: '#0F766E',
   },
   payButton: {
-    backgroundColor: Colors.secondary,
+    backgroundColor: '#0F766E',
     borderRadius: 14,
     height: 54,
     flexDirection: 'row',
@@ -274,17 +276,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 16,
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#0F766E',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   payButtonDisabled: {
     opacity: 0.5,
   },
   payButtonText: {
-    color: Colors.surface,
+    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
   },
