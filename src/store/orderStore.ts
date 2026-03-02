@@ -19,7 +19,7 @@ interface OrderState {
     taxRate: number
   ) => Promise<Order>
   updateOrderStatus: (orderId: string, status: string) => Promise<void>
-  completeOrder: (orderId: string, paymentData: Partial<Payment>) => Promise<void>
+  completeOrder: (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => Promise<void>
   fetchOrders: (shopId: string, limit?: number) => Promise<void>
   subscribeToOrder: (orderId: string) => () => void
 }
@@ -145,12 +145,14 @@ export const useOrderStore = create<OrderState>()(
       })
     },
 
-    completeOrder: async (orderId: string, paymentData: Partial<Payment>) => {
+    completeOrder: async (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => {
       const { error: paymentError } = await supabase
         .from('payments')
         .update({
           ...paymentData,
           status: 'success',
+          confirmation_type: confirmationType,
+          confirmed_by: confirmedBy ?? null,
           updated_at: new Date().toISOString(),
         })
         .eq('order_id', orderId)
@@ -184,7 +186,7 @@ export const useOrderStore = create<OrderState>()(
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('*, items:order_items(*), payment:payments(*)')
+          .select('*, items:order_items(*), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name))')
           .eq('shop_id', shopId)
           .order('created_at', { ascending: false })
           .limit(limit)
@@ -192,10 +194,18 @@ export const useOrderStore = create<OrderState>()(
         if (error) throw error
 
         set((state) => {
-          state.orders = (data || []).map((o: any) => ({
-            ...o,
-            payment: o.payment?.[0] || undefined,
-          })) as OrderWithItems[]
+          state.orders = (data || []).map((o: any) => {
+            const rawPayment = o.payment?.[0]
+            const confirmedByProfile = rawPayment?.confirmed_by_profile ?? undefined
+            const payment = rawPayment
+              ? { ...rawPayment, confirmed_by_profile: undefined }
+              : undefined
+            return {
+              ...o,
+              payment,
+              confirmedByProfile,
+            }
+          }) as OrderWithItems[]
           state.isLoading = false
         })
       } catch (err) {
@@ -226,6 +236,10 @@ export const useOrderStore = create<OrderState>()(
                 }
               }
             })
+            // Auto-confirm: when payment arrives as success from external source
+            if (newPayment.status === 'success' && !newPayment.confirmation_type) {
+              get().completeOrder(orderId, newPayment, 'auto')
+            }
           }
         )
         .subscribe()

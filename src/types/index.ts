@@ -16,6 +16,7 @@ export interface Profile {
   role: 'owner' | 'cashier'
   shop_id: string
   avatar_url?: string
+  push_token?: string | null
   created_at: string
 }
 
@@ -72,6 +73,8 @@ export interface Payment {
   status: 'pending' | 'success' | 'failed' | 'expired'
   qr_payload: string | null
   transaction_ref: string | null
+  confirmation_type: 'manual' | 'auto' | null
+  confirmed_by: string | null
   created_at: string
   updated_at: string
 }
@@ -79,6 +82,7 @@ export interface Payment {
 export interface OrderWithItems extends Order {
   items: OrderItem[]
   payment?: Payment
+  confirmedByProfile?: { full_name: string }
 }
 
 export interface CartItem {

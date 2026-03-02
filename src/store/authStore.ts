@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { supabase } from '../lib/supabase'
 import { Profile, Shop } from '../types'
+import * as Notifications from 'expo-notifications'
+import { Platform } from 'react-native'
 
 interface User {
   id: string
@@ -18,10 +20,11 @@ interface AuthState {
   initialize: () => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  registerPushToken: (userId: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
-  immer((set) => ({
+  immer((set, get) => ({
     user: null,
     profile: null,
     shop: null,
@@ -62,6 +65,9 @@ export const useAuthStore = create<AuthState>()(
             state.profile = profile as Profile
             state.shop = shop as Shop
           })
+
+          // Register push token (best-effort, non-blocking)
+          get().registerPushToken(user.id)
         }
       } catch (err) {
         // Session expired or invalid - user needs to sign in again
@@ -114,6 +120,9 @@ export const useAuthStore = create<AuthState>()(
           state.shop = shop as Shop
           state.isLoading = false
         })
+
+        // Register push token (best-effort, non-blocking)
+        get().registerPushToken(user.id)
       } catch (err) {
         set((state) => {
           state.isLoading = false
@@ -129,6 +138,39 @@ export const useAuthStore = create<AuthState>()(
         state.profile = null
         state.shop = null
       })
+    },
+
+    registerPushToken: async (userId: string) => {
+      try {
+        // Push notifications only work on physical devices
+        if (Platform.OS === 'web') return
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync()
+        let finalStatus = existingStatus
+
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync()
+          finalStatus = status
+        }
+
+        if (finalStatus !== 'granted') return
+
+        const tokenData = await Notifications.getExpoPushTokenAsync()
+        const pushToken = tokenData.data
+
+        await supabase
+          .from('profiles')
+          .update({ push_token: pushToken })
+          .eq('id', userId)
+
+        set((state) => {
+          if (state.profile) {
+            state.profile.push_token = pushToken
+          }
+        })
+      } catch {
+        // Non-critical: push notifications are best-effort
+      }
     },
   }))
 )

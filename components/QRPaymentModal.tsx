@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
@@ -15,6 +15,8 @@ interface QRPaymentModalProps {
   onConfirmed?: () => void;
   onCancel?: () => void;
   onExpired?: () => void;
+  onManualConfirm?: () => void;
+  cashierName?: string;
 }
 
 function generatePromptPayQRData(promptPayId: string, amount: number): string {
@@ -31,6 +33,8 @@ export function QRPaymentModal({
   onConfirmed,
   onCancel,
   onExpired,
+  onManualConfirm,
+  cashierName,
 }: QRPaymentModalProps) {
   const [status, setStatus] = useState<PaymentStatus>('waiting');
   const [timeLeft, setTimeLeft] = useState(Config.qr.timeout);
@@ -38,7 +42,7 @@ export function QRPaymentModal({
 
   // React to external payment status changes (realtime subscription)
   useEffect(() => {
-    if (paymentStatus === 'completed' && status === 'waiting') {
+    if (paymentStatus === 'success' && status === 'waiting') {
       setStatus('confirmed');
     }
   }, [paymentStatus, status]);
@@ -141,6 +145,31 @@ export function QRPaymentModal({
           </View>
         )}
       </View>
+
+      {status === 'waiting' && onManualConfirm && (
+        <TouchableOpacity
+          style={styles.manualConfirmButton}
+          onPress={() => {
+            Alert.alert(
+              'ยืนยันการรับเงิน',
+              cashierName
+                ? `${cashierName} ยืนยันว่าได้รับเงินแล้ว?`
+                : 'ยืนยันว่าได้รับเงินแล้ว?',
+              [
+                { text: 'ยกเลิก', style: 'cancel' },
+                {
+                  text: 'ยืนยัน',
+                  onPress: () => onManualConfirm(),
+                },
+              ]
+            );
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="checkmark-circle-outline" size={20} color={Colors.surface} />
+          <Text style={styles.manualConfirmText}>ยืนยันรับเงินแล้ว / Confirm Received</Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity
         style={[
@@ -265,6 +294,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.danger,
     fontWeight: '700',
+  },
+  manualConfirmButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: Colors.secondary,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  manualConfirmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.surface,
   },
   actionButton: {
     width: '100%',

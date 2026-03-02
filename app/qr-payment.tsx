@@ -4,12 +4,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { QRPaymentModal } from '../components/QRPaymentModal';
 import { Colors } from '../constants/colors';
 import { useOrderStore } from '../src/store/orderStore';
+import { useAuthStore } from '../src/store/authStore';
 
 export default function QRPaymentScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const currentOrder = useOrderStore((s) => s.currentOrder);
   const subscribeToOrder = useOrderStore((s) => s.subscribeToOrder);
   const completeOrder = useOrderStore((s) => s.completeOrder);
+  const profile = useAuthStore((s) => s.profile);
 
   useEffect(() => {
     if (!orderId) return;
@@ -20,14 +22,18 @@ export default function QRPaymentScreen() {
     };
   }, [orderId]);
 
-  useEffect(() => {
-    if (currentOrder?.payment?.status === 'success') {
-      // Payment confirmed via realtime subscription
-    }
-  }, [currentOrder?.payment?.status]);
-
   const handleConfirmed = () => {
     router.replace('/(pos)');
+  };
+
+  const handleManualConfirm = async () => {
+    if (!orderId || !profile) return;
+    try {
+      await completeOrder(orderId, {}, 'manual', profile.id);
+      router.replace('/(pos)');
+    } catch {
+      // Best effort
+    }
   };
 
   const handleCancel = async () => {
@@ -72,6 +78,8 @@ export default function QRPaymentScreen() {
         onConfirmed={handleConfirmed}
         onCancel={handleCancel}
         onExpired={handleExpired}
+        onManualConfirm={handleManualConfirm}
+        cashierName={profile?.full_name}
       />
     </View>
   );

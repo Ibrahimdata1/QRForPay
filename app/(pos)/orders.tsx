@@ -97,6 +97,26 @@ export default function OrdersScreen() {
           </View>
         ) : null}
       </View>
+      {item.payment?.confirmation_type ? (
+        <View style={styles.confirmationRow}>
+          {item.payment.confirmation_type === 'manual' ? (
+            <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
+              <Ionicons name="hand-left-outline" size={12} color="#D97706" />
+              <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>ยืนยันเอง</Text>
+              {item.confirmedByProfile?.full_name ? (
+                <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>
+                  {' '}· {item.confirmedByProfile.full_name}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
+              <Ionicons name="flash-outline" size={12} color={Colors.primary} />
+              <Text style={[styles.confirmBadgeText, { color: Colors.primary }]}>Auto</Text>
+            </View>
+          )}
+        </View>
+      ) : null}
       <View style={styles.orderFooter}>
         <Text style={styles.totalLabel}>รวม / Total</Text>
         <Text style={styles.totalAmount}>฿{(item.total_amount ?? 0).toFixed(2)}</Text>
@@ -182,6 +202,28 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 13,
     color: Colors.text.secondary,
+  },
+  confirmationRow: {
+    marginBottom: 10,
+  },
+  confirmBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  confirmBadgeManual: {
+    backgroundColor: '#FEF3C7',
+  },
+  confirmBadgeAuto: {
+    backgroundColor: '#DBEAFE',
+  },
+  confirmBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   orderFooter: {
     flexDirection: 'row',
