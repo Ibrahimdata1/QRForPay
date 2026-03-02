@@ -99,7 +99,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
             <View key={item.id ?? idx} style={styles.itemRow}>
               <View style={styles.itemLeft}>
                 <Text style={styles.itemName} numberOfLines={1}>
-                  {productMap[item.product_id] || `สินค้า #${idx + 1}`}
+                  {productMap[item.product_id] || (item as any).product_name || (item as any).name || `สินค้า #${idx + 1}`}
                 </Text>
                 <Text style={styles.itemUnit}>
                   {item.quantity} × ฿{item.unit_price.toFixed(0)}

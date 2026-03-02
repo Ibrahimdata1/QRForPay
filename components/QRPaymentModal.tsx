@@ -174,7 +174,7 @@ export function QRPaymentModal({
         }}
         activeOpacity={0.8}
       >
-        <Text style={styles.actionButtonText}>
+        <Text style={[styles.actionButtonText, status !== 'waiting' && styles.actionButtonTextLight]}>
           {status === 'confirmed' ? 'เสร็จสิ้น' : 'ยกเลิก'}
         </Text>
       </TouchableOpacity>
@@ -338,7 +338,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 52,
     borderRadius: 14,
-    backgroundColor: Colors.text.light,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -351,6 +353,9 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: '700',
+    color: Colors.text.secondary,
+  },
+  actionButtonTextLight: {
     color: Colors.surface,
   },
   confirmOverlay: {
@@ -398,7 +403,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#D1FAE5',
+    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },

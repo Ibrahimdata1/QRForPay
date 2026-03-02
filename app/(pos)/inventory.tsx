@@ -77,6 +77,7 @@ export default function InventoryScreen() {
   const [adjustType, setAdjustType] = useState<AdjustType>('stock_in');
   const [adjustNote, setAdjustNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [ingredientSearch, setIngredientSearch] = useState('');
 
   // History state
   const [transactions, setTransactions] = useState<
@@ -148,6 +149,8 @@ export default function InventoryScreen() {
       Alert.alert('สำเร็จ', 'บันทึกการเคลื่อนไหวสต็อกแล้ว');
       setAdjustQty('');
       setAdjustNote('');
+      setSelectedIngredientId('');
+      setIngredientSearch('');
     } catch (err: any) {
       Alert.alert('เกิดข้อผิดพลาด', err.message);
     } finally {
@@ -294,11 +297,24 @@ export default function InventoryScreen() {
 
       {/* Ingredient picker */}
       <Text style={styles.fieldLabel}>วัตถุดิบ *</Text>
+      <TextInput
+        style={{
+          borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
+          padding: 8, marginBottom: 8, fontSize: 14, color: Colors.text.primary,
+          backgroundColor: Colors.background,
+        }}
+        placeholder="ค้นหาวัตถุดิบ..."
+        placeholderTextColor={Colors.text.light}
+        value={ingredientSearch}
+        onChangeText={setIngredientSearch}
+      />
       <View style={styles.pickerList}>
         {ingredients.length === 0 ? (
           <Text style={styles.pickerEmpty}>ยังไม่มีวัตถุดิบ กรุณาเพิ่มก่อน</Text>
         ) : (
-          ingredients.map((ing) => (
+          ingredients
+            .filter((i) => i.name.toLowerCase().includes(ingredientSearch.toLowerCase()))
+            .map((ing) => (
             <TouchableOpacity
               key={ing.id}
               style={[

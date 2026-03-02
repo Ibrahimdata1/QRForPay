@@ -1,6 +1,7 @@
 import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Product } from '../src/types';
+import { Colors } from '../constants/colors';
 
 const AVATAR_COLORS = ['#FF8A80', '#80DEEA', '#FFD54F', '#80CBC4', '#CE93D8'];
 
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   name: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#111827',
     marginBottom: 6,
@@ -163,13 +164,13 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#0F766E',
+    color: Colors.primary,
   },
   addBtn: {
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

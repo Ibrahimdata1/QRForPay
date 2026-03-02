@@ -8,16 +8,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export default function LoginScreen() {
+  const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -48,7 +47,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Top teal section — 38% height */}
-      <View style={styles.topSection}>
+      <View style={[styles.topSection, { height: SCREEN_HEIGHT * 0.38 }]}>
         {/* POS icon: 2×2 grid of squares */}
         <View style={styles.posIcon}>
           <View style={styles.posIconRow}>
@@ -144,11 +143,10 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
   },
   topSection: {
-    height: SCREEN_HEIGHT * 0.38,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingBottom: 16,

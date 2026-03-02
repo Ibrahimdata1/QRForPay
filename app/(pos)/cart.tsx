@@ -108,7 +108,7 @@ export default function CartScreen() {
     // QR payment flow
     Alert.alert(
       'ยืนยันการชำระเงิน',
-      `ยอดรวม ฿${total.toFixed(2)}\nชำระผ่าน QR PromptPay`,
+      `ยอดรวม ฿${effectiveTotal.toFixed(2)}\nชำระผ่าน QR PromptPay`,
       [
         { text: 'ยกเลิก', style: 'cancel' },
         {
@@ -125,7 +125,8 @@ export default function CartScreen() {
                 discount,
                 taxRate
               );
-              clearCart();
+              // clearCart ควรย้ายไปใน qr-payment screen หลัง payment success
+              // เพื่อป้องกันตะกร้าหายก่อนที่ผู้ใช้จะชำระเงินจริง
               router.push({ pathname: '/qr-payment', params: { orderId: order.id } });
             } catch (err: any) {
               Alert.alert(
@@ -144,7 +145,12 @@ export default function CartScreen() {
   const handleCashPayment = async () => {
     if (!shop?.id || !profile?.id) return;
 
-    const currentTotal = total;
+    const currentTotal = effectiveTotal;
+
+    if (paymentMethod === 'cash' && cashReceivedNum === 0) {
+      Alert.alert('กรุณากรอกจำนวนเงินที่รับมา');
+      return;
+    }
 
     if (cashReceivedNum > 0 && cashReceivedNum < currentTotal) {
       Alert.alert('จำนวนเงินไม่เพียงพอ', `ยอดที่ต้องชำระ ฿${currentTotal.toFixed(0)}`);
@@ -274,7 +280,7 @@ export default function CartScreen() {
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
           <Text style={styles.totalLabel}>รวมทั้งหมด</Text>
-          <Text style={styles.totalValue}>฿{total.toFixed(2)}</Text>
+          <Text style={styles.totalValue}>฿{effectiveTotal.toFixed(2)}</Text>
         </View>
 
         {/* Payment method selector */}
@@ -356,7 +362,7 @@ export default function CartScreen() {
             color={Colors.surface}
           />
           <Text style={styles.payButtonText}>
-            {`ชำระเงิน ฿${total.toFixed(0)}`}
+            {`ชำระเงิน ฿${effectiveTotal.toFixed(0)}`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -370,7 +376,27 @@ export default function CartScreen() {
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
-            onPress={() => setShowDiscountModal(false)}
+            onPress={() => {
+              if (discountInput !== '') {
+                Alert.alert(
+                  'ยกเลิกการกรอกส่วนลด?',
+                  'ข้อมูลที่กรอกจะหายไป',
+                  [
+                    { text: 'ยกเลิก', style: 'cancel' },
+                    {
+                      text: 'ออก',
+                      style: 'destructive',
+                      onPress: () => {
+                        setDiscountInput('');
+                        setShowDiscountModal(false);
+                      },
+                    },
+                  ]
+                );
+              } else {
+                setShowDiscountModal(false);
+              }
+            }}
           />
           <View style={styles.discountSheet}>
             <Text style={styles.discountTitle}>ส่วนลด</Text>

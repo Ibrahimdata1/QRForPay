@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -40,6 +42,8 @@ export default function OrdersScreen() {
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const isLoading = useOrderStore((s) => s.isLoading);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'cancelled'>('all');
 
   useEffect(() => {
     if (shop?.id) {
@@ -130,6 +134,14 @@ export default function OrdersScreen() {
     );
   };
 
+  const filteredOrders = orders.filter(order => {
+    const matchSearch = searchText === '' ||
+      String(order.order_number).includes(searchText) ||
+      (order.total_amount && String(order.total_amount).includes(searchText));
+    const matchStatus = statusFilter === 'all' || order.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
   if (isLoading && orders.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -140,8 +152,33 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Search */}
+      <TextInput
+        style={{ margin: 12, padding: 10, borderRadius: 10, borderWidth: 1,
+          borderColor: Colors.border, backgroundColor: Colors.surface,
+          fontSize: 14, color: Colors.text.primary }}
+        placeholder="ค้นหาเลขออเดอร์..."
+        placeholderTextColor={Colors.text.light}
+        value={searchText}
+        onChangeText={setSearchText}
+      />
+      {/* Status filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingBottom: 8 }}>
+        {(['all', 'pending', 'completed', 'cancelled'] as const).map(s => (
+          <TouchableOpacity key={s}
+            style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+              backgroundColor: statusFilter === s ? Colors.primary : Colors.surface,
+              borderWidth: 1, borderColor: statusFilter === s ? Colors.primary : Colors.border }}
+            onPress={() => setStatusFilter(s)}>
+            <Text style={{ color: statusFilter === s ? '#fff' : Colors.text.secondary, fontSize: 13 }}>
+              {s === 'all' ? 'ทั้งหมด' : s === 'pending' ? 'รอ' : s === 'completed' ? 'สำเร็จ' : 'ยกเลิก'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       <FlatList
-        data={orders}
+        data={filteredOrders}
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
         contentContainerStyle={styles.listContent}

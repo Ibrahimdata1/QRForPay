@@ -69,7 +69,7 @@ export default function ProductsScreen() {
             <Image source={{ uri: item.image_url }} style={styles.thumbnailImg} resizeMode="cover" />
           ) : (
             <View style={styles.thumbnailFallback}>
-              <Ionicons name="cube-outline" size={20} color="#0F766E" />
+              <Ionicons name="cube-outline" size={20} color={Colors.primary} />
             </View>
           )}
         </View>
@@ -99,7 +99,7 @@ export default function ProductsScreen() {
           style={styles.editBtn}
           onPress={() => { setEditingProduct(item); setFormVisible(true); }}
         >
-          <Ionicons name="pencil-outline" size={16} color="#0F766E" />
+          <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
         </TouchableOpacity>
 
         {/* Delete */}
@@ -315,10 +315,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#0F766E',
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

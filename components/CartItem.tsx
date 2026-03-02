@@ -88,9 +88,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   qtyBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',

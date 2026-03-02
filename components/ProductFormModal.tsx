@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, ActivityIndicator, Alert, Image,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../src/lib/supabase';
 import { Product, Category } from '../src/types';
+import { Colors } from '../constants/colors';
 
 // Ensure 'product-images' bucket exists in Supabase Storage (public)
 
@@ -112,6 +114,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
             </TouchableOpacity>
           </View>
 
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Image Picker */}
             <View style={styles.imagePickerWrapper}>
@@ -122,7 +125,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
                 activeOpacity={0.8}
               >
                 {uploading ? (
-                  <ActivityIndicator color="#0F766E" size="large" />
+                  <ActivityIndicator color={Colors.primary} size="large" />
                 ) : imageUrl ? (
                   <>
                     <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
@@ -199,6 +202,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
 
             <View style={{ height: 16 }} />
           </ScrollView>
+          </KeyboardAvoidingView>
 
           {/* Save button */}
           <TouchableOpacity
@@ -239,7 +243,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: '#6B7280', marginBottom: 6, marginTop: 12 },
   input: {
     borderWidth: 1.5,
-    borderColor: '#D1FAE5',
+    borderColor: '#D1D5DB',
     borderRadius: 12,
     paddingHorizontal: 14,
     height: 48,
@@ -255,21 +259,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#D1FAE5',
+    borderColor: '#D1D5DB',
     marginRight: 8,
     backgroundColor: '#FFFFFF',
   },
-  catPillActive: { backgroundColor: '#0F766E', borderColor: '#0F766E' },
+  catPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   catPillText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   catPillTextActive: { color: '#FFFFFF' },
   saveBtn: {
     height: 52,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#0F766E',
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -318,7 +322,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
