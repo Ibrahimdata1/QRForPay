@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +19,7 @@ import {
   selectSubtotal,
   selectTaxAmount,
   selectGrandTotal,
+  selectDiscountAmount,
 } from '../../src/store/cartStore';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
@@ -38,6 +41,19 @@ export default function CartScreen() {
   const profile = useAuthStore((s) => s.profile);
 
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountInput, setDiscountInput] = useState('');
+  const discountAmount = useCartStore(selectDiscountAmount);
+  const applyDiscount = useCartStore((s) => s.applyDiscount);
+
+  const handleApplyDiscount = () => {
+    const val = parseFloat(discountInput);
+    if (!isNaN(val) && val >= 0 && val <= 100) {
+      applyDiscount(val);
+    }
+    setShowDiscountModal(false);
+    setDiscountInput('');
+  };
 
   const handlePayment = () => {
     if (items.length === 0) {
@@ -138,6 +154,25 @@ export default function CartScreen() {
           <Text style={styles.summaryLabel}>ยอดรวม / Subtotal</Text>
           <Text style={styles.summaryValue}>฿{subtotal.toFixed(2)}</Text>
         </View>
+        {/* Discount row — always visible with button */}
+        <TouchableOpacity
+          style={styles.discountRow}
+          onPress={() => {
+            setDiscountInput(discount > 0 ? String(discount) : '');
+            setShowDiscountModal(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.discountLeft}>
+            <Ionicons name="pricetag-outline" size={16} color={discount > 0 ? '#EF4444' : '#9CA3AF'} />
+            <Text style={[styles.summaryLabel, discount > 0 && { color: '#EF4444' }]}>
+              {discount > 0 ? `ส่วนลด ${discount}%` : 'เพิ่มส่วนลด'}
+            </Text>
+          </View>
+          <Text style={[styles.summaryValue, discount > 0 && { color: '#EF4444' }]}>
+            {discount > 0 ? `-฿${discountAmount.toFixed(2)}` : '—'}
+          </Text>
+        </TouchableOpacity>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>ภาษี VAT 7%</Text>
           <Text style={styles.summaryValue}>฿{taxAmount.toFixed(2)}</Text>
@@ -160,6 +195,45 @@ export default function CartScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={showDiscountModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.discountOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDiscountModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.discountSheet}>
+            <Text style={styles.discountTitle}>ส่วนลด / Discount</Text>
+            <View style={styles.discountInputWrap}>
+              <TextInput
+                style={styles.discountInput}
+                value={discountInput}
+                onChangeText={setDiscountInput}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor="#9CA3AF"
+                maxLength={3}
+                autoFocus
+              />
+              <Text style={styles.discountPercent}>%</Text>
+            </View>
+            <Text style={styles.discountHint}>กรอก 0–100</Text>
+            <View style={styles.discountBtns}>
+              {discount > 0 && (
+                <TouchableOpacity
+                  style={styles.discountClearBtn}
+                  onPress={() => { applyDiscount(0); setShowDiscountModal(false); setDiscountInput(''); }}
+                >
+                  <Text style={styles.discountClearText}>ลบส่วนลด</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.discountApplyBtn} onPress={handleApplyDiscount}>
+                <Text style={styles.discountApplyText}>ยืนยัน</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -289,5 +363,97 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
+  },
+  discountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  discountLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  discountOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  discountSheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+  },
+  discountTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#134E4A',
+    marginBottom: 16,
+  },
+  discountInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#D1FAE5',
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    height: 60,
+    gap: 4,
+  },
+  discountInput: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#134E4A',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  discountPercent: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  discountHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  discountBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  discountClearBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  discountClearText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  discountApplyBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#0F766E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  discountApplyText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

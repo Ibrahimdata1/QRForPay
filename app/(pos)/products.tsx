@@ -6,12 +6,14 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useProductStore } from '../../src/store/productStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { Product } from '../../src/types';
+import { ProductFormModal } from '../../components/ProductFormModal';
 
 export default function ProductsScreen() {
   const shop = useAuthStore((s) => s.shop);
@@ -21,7 +23,10 @@ export default function ProductsScreen() {
   const fetchCategories = useProductStore((s) => s.fetchCategories);
   const isLoading = useProductStore((s) => s.isLoading);
 
+  const saveProduct = useProductStore((s) => s.saveProduct);
   const [search, setSearch] = useState('');
+  const [formVisible, setFormVisible] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     if (shop?.id && products.length === 0) {
@@ -70,6 +75,12 @@ export default function ProductsScreen() {
           {item.stock === 0 ? 'หมด' : item.stock}
         </Text>
       </View>
+      <TouchableOpacity
+        style={styles.editBtn}
+        onPress={() => { setEditingProduct(item); setFormVisible(true); }}
+      >
+        <Ionicons name="pencil-outline" size={16} color="#0F766E" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -114,6 +125,21 @@ export default function ProductsScreen() {
             <Text style={styles.emptyText}>ไม่พบสินค้า / No products found</Text>
           </View>
         }
+      />
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => { setEditingProduct(null); setFormVisible(true); }}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+      <ProductFormModal
+        visible={formVisible}
+        product={editingProduct}
+        categories={categories}
+        shopId={shop?.id ?? ''}
+        onSave={(data) => saveProduct(shop?.id ?? '', data)}
+        onClose={() => setFormVisible(false)}
       />
     </View>
   );
@@ -207,5 +233,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text.light,
     marginTop: 12,
+  },
+  editBtn: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0F766E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0F766E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });

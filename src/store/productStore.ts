@@ -17,6 +17,8 @@ interface ProductState {
   setSearch: (query: string) => void
   setProducts: (products: Product[]) => void
   deductStock: (productId: string, qty: number) => void
+  saveProduct: (shopId: string, product: Partial<Product> & { name: string; price: number }) => Promise<void>
+  deleteProduct: (productId: string) => Promise<void>
 }
 
 export const useProductStore = create<ProductState>()(
@@ -97,6 +99,40 @@ export const useProductStore = create<ProductState>()(
           product.stock = Math.max(0, product.stock - qty)
         }
       }),
+
+    saveProduct: async (shopId, productData) => {
+      const isEdit = !!productData.id
+      if (isEdit) {
+        const { error } = await supabase.from('products').update({
+          name: productData.name,
+          price: productData.price,
+          category_id: productData.category_id ?? null,
+          stock: productData.stock ?? 0,
+        }).eq('id', productData.id!)
+        if (error) throw error
+        set((state) => {
+          const idx = state.products.findIndex((p) => p.id === productData.id)
+          if (idx !== -1) Object.assign(state.products[idx], productData)
+        })
+      } else {
+        const { data, error } = await supabase.from('products').insert({
+          shop_id: shopId,
+          name: productData.name,
+          price: productData.price,
+          category_id: productData.category_id ?? null,
+          stock: productData.stock ?? 0,
+          is_active: true,
+        }).select().single()
+        if (error) throw error
+        set((state) => { state.products.push(data as Product) })
+      }
+    },
+
+    deleteProduct: async (productId) => {
+      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
+      if (error) throw error
+      set((state) => { state.products = state.products.filter((p) => p.id !== productId) })
+    },
   }))
 )
 

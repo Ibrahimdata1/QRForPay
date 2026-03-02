@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
+import { OrderDetailModal } from '../../components/OrderDetailModal';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
@@ -37,6 +38,7 @@ export default function OrdersScreen() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const isLoading = useOrderStore((s) => s.isLoading);
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
 
   useEffect(() => {
     if (shop?.id) {
@@ -55,7 +57,7 @@ export default function OrdersScreen() {
   };
 
   const renderOrder = ({ item }: { item: OrderWithItems }) => (
-    <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>#{item.order_number}</Text>
         <View
@@ -146,6 +148,11 @@ export default function OrdersScreen() {
             <Text style={styles.emptyText}>ยังไม่มีรายการ / No orders yet</Text>
           </View>
         }
+      />
+      <OrderDetailModal
+        visible={selectedOrder !== null}
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
       />
     </View>
   );
