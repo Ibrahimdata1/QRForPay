@@ -147,6 +147,7 @@ const styles = StyleSheet.create({
   },
   productGrid: {
     paddingHorizontal: 12,
+    paddingTop: 12,
     paddingBottom: 100,
   },
   columnWrapper: {
