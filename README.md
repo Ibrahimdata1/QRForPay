@@ -72,11 +72,11 @@ QRForPay/
 ## Database Schema
 
 ```
-shops ──< profiles (owner_id)
-shops ──< categories
-shops ──< products ──< categories
-shops ──< orders ──< order_items ──< products
-              └──< payments
+shops ──< profiles          (profiles.shop_id → shops.id)
+shops ──o profiles          (shops.owner_id → profiles.id, one-to-one)
+shops ──< categories ──< products
+shops ──< orders ──< order_items >── products
+              └──1 payments (payments.order_id UNIQUE)
 ```
 
 **7 tables:** `shops`, `profiles`, `categories`, `products`, `orders`, `order_items`, `payments`
