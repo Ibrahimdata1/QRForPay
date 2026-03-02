@@ -111,7 +111,7 @@ export async function pollPaymentStatus(
           const status = payload.new.status as string
           onStatusChange(status)
 
-          if (status === 'completed' && !resolved) {
+          if (status === 'success' && !resolved) {
             resolved = true
             clearTimeout(timer)
             channel.unsubscribe()

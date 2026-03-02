@@ -12,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0066CC"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.easyshop.pos",
@@ -26,7 +28,9 @@
         "backgroundColor": "#0066CC"
       },
       "package": "com.easyshop.pos",
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -39,7 +43,8 @@
         {
           "cameraPermission": "Allow EasyShop to access your camera for QR code scanning."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

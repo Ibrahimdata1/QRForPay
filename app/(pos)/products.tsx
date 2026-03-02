@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
@@ -24,6 +26,7 @@ export default function ProductsScreen() {
   const isLoading = useProductStore((s) => s.isLoading);
 
   const saveProduct = useProductStore((s) => s.saveProduct);
+  const deleteProduct = useProductStore((s) => s.deleteProduct);
   const [search, setSearch] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -47,42 +50,81 @@ export default function ProductsScreen() {
     return products.filter((p) => p.name.toLowerCase().includes(q));
   }, [products, search]);
 
-  const renderProduct = ({ item }: { item: Product }) => (
-    <View style={styles.productRow}>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
-        {item.category_id ? (
-          <Text style={styles.productCategory}>
-            {categoryMap[item.category_id] || '—'}
+  const getStockColor = (stock: number) => {
+    if (stock === 0) return '#EF4444';
+    if (stock <= 10) return '#F59E0B';
+    return '#10B981';
+  };
+
+  const renderProduct = ({ item }: { item: Product }) => {
+    const stockColor = getStockColor(item.stock);
+    return (
+      <View style={styles.productRow}>
+        {/* Left accent bar */}
+        <View style={[styles.accentBar, { backgroundColor: stockColor }]} />
+
+        {/* Thumbnail */}
+        <View style={styles.thumbnail}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.thumbnailImg} resizeMode="cover" />
+          ) : (
+            <View style={styles.thumbnailFallback}>
+              <Ionicons name="cube-outline" size={20} color="#0F766E" />
+            </View>
+          )}
+        </View>
+
+        {/* Info */}
+        <View style={styles.productInfo}>
+          <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+          {item.category_id ? (
+            <Text style={styles.productCategory}>
+              {categoryMap[item.category_id] || '—'}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Price */}
+        <Text style={styles.productPrice}>฿{item.price.toFixed(0)}</Text>
+
+        {/* Stock badge */}
+        <View style={[styles.stockBadge, { backgroundColor: stockColor + '18', borderColor: stockColor + '40' }]}>
+          <Text style={[styles.stockText, { color: stockColor }]}>
+            {item.stock === 0 ? 'หมด' : item.stock}
           </Text>
-        ) : null}
-      </View>
-      <Text style={styles.productPrice}>฿{item.price.toFixed(2)}</Text>
-      <View
-        style={[
-          styles.stockBadge,
-          item.stock === 0 && styles.stockBadgeOut,
-          item.stock > 0 && item.stock <= 10 && styles.stockBadgeLow,
-        ]}
-      >
-        <Text
-          style={[
-            styles.stockText,
-            item.stock === 0 && styles.stockTextOut,
-            item.stock > 0 && item.stock <= 10 && styles.stockTextLow,
-          ]}
+        </View>
+
+        {/* Edit */}
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => { setEditingProduct(item); setFormVisible(true); }}
         >
-          {item.stock === 0 ? 'หมด' : item.stock}
-        </Text>
+          <Ionicons name="pencil-outline" size={16} color="#0F766E" />
+        </TouchableOpacity>
+
+        {/* Delete */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() => {
+            Alert.alert(
+              'ลบสินค้า',
+              `ต้องการลบ "${item.name}" ออกจากระบบ?`,
+              [
+                { text: 'ยกเลิก', style: 'cancel' },
+                {
+                  text: 'ลบ',
+                  style: 'destructive',
+                  onPress: () => deleteProduct(item.id),
+                },
+              ]
+            );
+          }}
+        >
+          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={styles.editBtn}
-        onPress={() => { setEditingProduct(item); setFormVisible(true); }}
-      >
-        <Ionicons name="pencil-outline" size={16} color="#0F766E" />
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   if (isLoading && products.length === 0) {
     return (
@@ -234,9 +276,37 @@ const styles = StyleSheet.create({
     color: Colors.text.light,
     marginTop: 12,
   },
+  accentBar: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  thumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  thumbnailImg: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E6F5F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   editBtn: {
     padding: 8,
     marginLeft: 8,
+  },
+  deleteBtn: {
+    padding: 8,
+    marginLeft: 4,
   },
   fab: {
     position: 'absolute',

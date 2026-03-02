@@ -12,6 +12,7 @@ import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
 import { OrderDetailModal } from '../../components/OrderDetailModal';
+import { Colors } from '../../constants/colors';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
@@ -21,16 +22,16 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  pending: 'รอดำเนินการ / Pending',
-  confirmed: 'ยืนยันแล้ว / Confirmed',
-  completed: 'สำเร็จ / Completed',
-  cancelled: 'ยกเลิก / Cancelled',
+  pending: 'รอดำเนินการ',
+  confirmed: 'ยืนยันแล้ว',
+  completed: 'สำเร็จ',
+  cancelled: 'ยกเลิก',
 };
 
 const methodLabels: Record<string, string> = {
   qr: 'QR PromptPay',
-  cash: 'เงินสด / Cash',
-  card: 'บัตร / Card',
+  cash: 'เงินสด',
+  card: 'บัตรเครดิต',
 };
 
 export default function OrdersScreen() {
@@ -46,89 +47,93 @@ export default function OrdersScreen() {
     }
   }, [shop?.id]);
 
-  const formatTime = (dateStr: string) => {
+  const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    const date = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    return `${date}  ${time}`;
   };
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
-  };
+  const renderOrder = ({ item }: { item: OrderWithItems }) => {
+    const accentColor = statusColors[item.status] || '#9CA3AF';
+    return (
+      <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
+        {/* Left accent bar */}
+        <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
 
-  const renderOrder = ({ item }: { item: OrderWithItems }) => (
-    <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
-      <View style={styles.orderHeader}>
-        <Text style={styles.orderNumber}>#{item.order_number}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: (statusColors[item.status] || '#9CA3AF') + '20' },
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusText,
-              { color: statusColors[item.status] || '#9CA3AF' },
-            ]}
-          >
-            {statusLabels[item.status] || item.status}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.orderDetails}>
-        <View style={styles.detailRow}>
-          <Ionicons name="calendar-outline" size={16} color={'#9CA3AF'} />
-          <Text style={styles.detailText}>{formatDate(item.created_at)}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="time-outline" size={16} color={'#9CA3AF'} />
-          <Text style={styles.detailText}>{formatTime(item.created_at)}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="cube-outline" size={16} color={'#9CA3AF'} />
-          <Text style={styles.detailText}>{item.items?.length ?? 0} items</Text>
-        </View>
-        {item.payment_method ? (
-          <View style={styles.detailRow}>
-            <Ionicons name="card-outline" size={16} color={'#9CA3AF'} />
-            <Text style={styles.detailText}>
-              {methodLabels[item.payment_method] || item.payment_method}
-            </Text>
+        <View style={styles.cardBody}>
+          <View style={styles.orderHeader}>
+            <Text style={styles.orderNumber}>#{item.order_number}</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: accentColor + '1A' },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: accentColor },
+                ]}
+              >
+                {statusLabels[item.status] || item.status}
+              </Text>
+            </View>
           </View>
-        ) : null}
-      </View>
-      {item.payment?.confirmation_type ? (
-        <View style={styles.confirmationRow}>
-          {item.payment.confirmation_type === 'manual' ? (
-            <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
-              <Ionicons name="hand-left-outline" size={12} color="#D97706" />
-              <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>ยืนยันเอง</Text>
-              {item.confirmedByProfile?.full_name ? (
-                <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>
-                  {' '}· {item.confirmedByProfile.full_name}
+
+          <View style={styles.orderMeta}>
+            <View style={styles.detailRow}>
+              <Ionicons name="time-outline" size={14} color={Colors.text.light} />
+              <Text style={styles.detailText}>{formatDateTime(item.created_at)}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Ionicons name="cube-outline" size={14} color={Colors.text.light} />
+              <Text style={styles.detailText}>{item.items?.length ?? 0} รายการ</Text>
+            </View>
+            {item.payment_method ? (
+              <View style={styles.detailRow}>
+                <Ionicons name="card-outline" size={14} color={Colors.text.light} />
+                <Text style={styles.detailText}>
+                  {methodLabels[item.payment_method] || item.payment_method}
                 </Text>
-              ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          {item.payment?.confirmation_type ? (
+            <View style={styles.confirmationRow}>
+              {item.payment.confirmation_type === 'manual' ? (
+                <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
+                  <Ionicons name="hand-left-outline" size={11} color="#D97706" />
+                  <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>ยืนยันเอง</Text>
+                  {item.confirmedByProfile?.full_name ? (
+                    <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>
+                      {' '}· {item.confirmedByProfile.full_name}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
+                  <Ionicons name="flash-outline" size={11} color="#0F766E" />
+                  <Text style={[styles.confirmBadgeText, { color: '#0F766E' }]}>อัตโนมัติ</Text>
+                </View>
+              )}
             </View>
-          ) : (
-            <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
-              <Ionicons name="flash-outline" size={12} color={'#0F766E'} />
-              <Text style={[styles.confirmBadgeText, { color: '#0F766E' }]}>Auto</Text>
-            </View>
-          )}
+          ) : null}
+
+          <View style={styles.orderFooter}>
+            <Text style={styles.totalLabel}>ยอดรวม</Text>
+            <Text style={styles.totalAmount}>฿{(item.total_amount ?? 0).toFixed(2)}</Text>
+          </View>
         </View>
-      ) : null}
-      <View style={styles.orderFooter}>
-        <Text style={styles.totalLabel}>รวม / Total</Text>
-        <Text style={styles.totalAmount}>฿{(item.total_amount ?? 0).toFixed(2)}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading && orders.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={'#0F766E'} />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
@@ -144,8 +149,8 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={'#9CA3AF'} />
-            <Text style={styles.emptyText}>ยังไม่มีรายการ / No orders yet</Text>
+            <Ionicons name="receipt-outline" size={64} color={Colors.text.light} />
+            <Text style={styles.emptyText}>ยังไม่มีรายการ</Text>
           </View>
         }
       />
@@ -161,7 +166,7 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0FDF9',
+    backgroundColor: Colors.background,
   },
   listContent: {
     padding: 16,
@@ -169,26 +174,35 @@ const styles = StyleSheet.create({
   orderCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#D1FAE5',
-    shadowColor: '#0F766E',
+    borderColor: Colors.border,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  accentBar: {
+    width: 4,
+    alignSelf: 'stretch',
+  },
+  cardBody: {
+    flex: 1,
+    padding: 16,
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   orderNumber: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#134E4A',
+    color: Colors.text.primary,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -199,11 +213,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  orderDetails: {
+  orderMeta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 10,
   },
   detailRow: {
     flexDirection: 'row',
@@ -211,8 +225,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   detailText: {
-    fontSize: 13,
-    color: '#6B7280',
+    fontSize: 12,
+    color: Colors.text.secondary,
   },
   confirmationRow: {
     marginBottom: 10,
@@ -230,10 +244,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   confirmBadgeAuto: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: Colors.primaryLight,
   },
   confirmBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   orderFooter: {
@@ -241,17 +255,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#D1FAE5',
-    paddingTop: 12,
+    borderTopColor: Colors.border,
+    paddingTop: 10,
   },
   totalLabel: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 13,
+    color: Colors.text.secondary,
   },
   totalAmount: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#0F766E',
+    color: Colors.primary,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -259,8 +273,8 @@ const styles = StyleSheet.create({
     paddingTop: 80,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#9CA3AF',
+    fontSize: 15,
+    color: Colors.text.light,
     marginTop: 12,
   },
 });

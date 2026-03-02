@@ -8,24 +8,29 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const signIn = useAuthStore((s) => s.signIn);
   const isLoading = useAuthStore((s) => s.isLoading);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setError('กรุณากรอกอีเมลและรหัสผ่าน / Please enter email and password');
+      setError('กรุณากรอกอีเมลและรหัสผ่าน');
       return;
     }
     setError('');
@@ -33,7 +38,7 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
       router.replace('/(pos)');
     } catch (err: any) {
-      setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ / Login failed');
+      setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
     }
   };
 
@@ -42,73 +47,95 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inner}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Ionicons name="cart" size={48} color={Colors.surface} />
+      {/* Top teal section — 38% height */}
+      <View style={styles.topSection}>
+        {/* POS icon: 2×2 grid of squares */}
+        <View style={styles.posIcon}>
+          <View style={styles.posIconRow}>
+            <View style={styles.posSquare} />
+            <View style={styles.posSquare} />
           </View>
-          <Text style={styles.brandName}>EasyShop</Text>
-          <Text style={styles.brandTagline}>ระบบขายหน้าร้าน | Point of Sale</Text>
+          <View style={styles.posIconRow}>
+            <View style={styles.posSquare} />
+            <View style={[styles.posSquare, styles.posSquareAccent]} />
+          </View>
+        </View>
+        <Text style={styles.brandName}>EasyShop</Text>
+        <Text style={styles.brandTagline}>ระบบขายหน้าร้าน</Text>
+      </View>
+
+      {/* Bottom white card — 62% height */}
+      <View style={styles.bottomCard}>
+        <Text style={styles.welcomeTitle}>ยินดีต้อนรับ</Text>
+        <Text style={styles.welcomeSubtitle}>เข้าสู่ระบบเพื่อเริ่มขาย</Text>
+
+        <Text style={styles.label}>อีเมล</Text>
+        <View style={[styles.inputContainer, emailFocused && styles.inputContainerFocused]}>
+          <Ionicons
+            name="mail-outline"
+            size={20}
+            color={emailFocused ? Colors.primary : Colors.text.light}
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="your@email.com"
+            placeholderTextColor={Colors.text.light}
+            value={email}
+            onChangeText={setEmail}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+          />
         </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>อีเมล / Email</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={Colors.text.light} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="your@email.com"
-              placeholderTextColor={Colors.text.light}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
+        <Text style={styles.label}>รหัสผ่าน</Text>
+        <View style={[styles.inputContainer, passwordFocused && styles.inputContainerFocused]}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={20}
+            color={passwordFocused ? Colors.primary : Colors.text.light}
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor={Colors.text.light}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            secureTextEntry={!showPassword}
+            editable={!isLoading}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={Colors.text.light}
             />
-          </View>
-
-          <Text style={styles.label}>รหัสผ่าน / Password</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors.text.light} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter password"
-              placeholderTextColor={Colors.text.light}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              editable={!isLoading}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-              <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={20}
-                color={Colors.text.light}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={16} color={Colors.danger} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            activeOpacity={0.8}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={Colors.surface} />
-            ) : (
-              <Text style={styles.loginButtonText}>เข้าสู่ระบบ / Sign In</Text>
-            )}
           </TouchableOpacity>
         </View>
+
+        {error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+          onPress={handleLogin}
+          activeOpacity={0.8}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={Colors.surface} />
+          ) : (
+            <Text style={styles.loginButtonText}>เข้าสู่ระบบ</Text>
+          )}
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
@@ -117,59 +144,82 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0FDF9',
-  },
-  inner: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
     backgroundColor: '#0F766E',
-    justifyContent: 'center',
+  },
+  topSection: {
+    height: SCREEN_HEIGHT * 0.38,
+    backgroundColor: '#0F766E',
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#0F766E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    justifyContent: 'center',
+    paddingBottom: 16,
+  },
+  posIcon: {
+    gap: 6,
+    marginBottom: 20,
+  },
+  posIconRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  posSquare: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  posSquareAccent: {
+    backgroundColor: '#F59E0B',
   },
   brandName: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   brandTagline: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.70)',
     marginTop: 4,
+    letterSpacing: 0.3,
   },
-  form: {
-    width: '100%',
+  bottomCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
+  welcomeTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: 28,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text.primary,
-    marginBottom: 8,
-    marginTop: 16,
+    marginBottom: 6,
+    marginTop: 14,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
     paddingHorizontal: 12,
+  },
+  inputContainerFocused: {
+    borderColor: Colors.primary,
   },
   inputIcon: {
     marginRight: 8,
@@ -177,38 +227,29 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: 48,
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.text.primary,
   },
   eyeIcon: {
     padding: 4,
   },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
-  },
   errorText: {
     fontSize: 13,
     color: Colors.danger,
-    marginLeft: 6,
-    flex: 1,
+    marginTop: 10,
+    marginLeft: 2,
   },
   loginButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
-    shadowColor: '#0F766E',
+    marginTop: 28,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
     elevation: 4,
   },
   loginButtonDisabled: {

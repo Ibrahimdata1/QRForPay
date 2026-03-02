@@ -1,8 +1,26 @@
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TouchableOpacity, Alert } from 'react-native';
 import { Colors } from '../../constants/colors';
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function POSLayout() {
+  const signOut = useAuthStore((s) => s.signOut);
+
+  const handleLogout = () => {
+    Alert.alert('ออกจากระบบ', 'ต้องการออกจากระบบ?', [
+      { text: 'ยกเลิก', style: 'cancel' },
+      {
+        text: 'ออกจากระบบ',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
+  };
+
   return (
     <Tabs
       screenOptions={{
@@ -11,8 +29,9 @@ export default function POSLayout() {
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
-          height: 85,
-          paddingBottom: 28,
+          borderTopWidth: 1,
+          height: 72,
+          paddingBottom: 16,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -21,20 +40,26 @@ export default function POSLayout() {
         },
         headerStyle: {
           backgroundColor: Colors.surface,
+          borderBottomColor: Colors.border,
+          borderBottomWidth: 1,
         },
         headerTintColor: Colors.text.primary,
         headerTitleStyle: {
           fontWeight: '700',
           fontSize: 18,
         },
-        headerShadowVisible: false,
+        headerRight: () => (
+          <TouchableOpacity onPress={handleLogout} style={{ marginRight: 16 }}>
+            <Ionicons name="log-out-outline" size={24} color={Colors.text.secondary} />
+          </TouchableOpacity>
+        ),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'POS',
-          headerTitle: 'EasyShop POS',
+          title: 'ขาย',
+          headerTitle: 'ร้านอาหาร',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -43,8 +68,8 @@ export default function POSLayout() {
       <Tabs.Screen
         name="orders"
         options={{
-          title: 'Orders',
-          headerTitle: 'รายการสั่งซื้อ / Orders',
+          title: 'ออเดอร์',
+          headerTitle: 'รายการสั่งซื้อ',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="receipt" size={size} color={color} />
           ),
@@ -53,10 +78,20 @@ export default function POSLayout() {
       <Tabs.Screen
         name="products"
         options={{
-          title: 'Products',
-          headerTitle: 'สินค้า / Products',
+          title: 'สินค้า',
+          headerTitle: 'จัดการสินค้า',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="grid" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inventory"
+        options={{
+          title: 'คลัง',
+          headerTitle: 'จัดการวัตถุดิบ',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="flask-outline" size={size} color={color} />
           ),
         }}
       />
@@ -64,8 +99,8 @@ export default function POSLayout() {
         name="cart"
         options={{
           href: null,
-          title: 'Cart',
-          headerTitle: 'ตะกร้าสินค้า / Cart',
+          title: 'ตะกร้า',
+          headerTitle: 'ตะกร้าสินค้า',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cart" size={size} color={color} />
           ),

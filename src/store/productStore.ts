@@ -129,7 +129,7 @@ export const useProductStore = create<ProductState>()(
     },
 
     deleteProduct: async (productId) => {
-      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
+      const { error } = await supabase.from('products').update({ is_active: false, deleted_at: new Date().toISOString() }).eq('id', productId)
       if (error) throw error
       set((state) => { state.products = state.products.filter((p) => p.id !== productId) })
     },

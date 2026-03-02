@@ -45,7 +45,7 @@ export default function POSScreen() {
   }, [shop?.id]);
 
   const categoryOptions = useMemo(() => {
-    const all = { id: 'all', label: 'ทั้งหมด / All' };
+    const all = { id: 'all', label: 'ทั้งหมด' };
     return [all, ...categories.map((c) => ({ id: c.id, label: c.name }))];
   }, [categories]);
 
@@ -64,10 +64,10 @@ export default function POSScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={'#9CA3AF'} style={styles.searchIcon} />
+        <Ionicons name="search" size={20} color={Colors.text.light} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="ค้นหาสินค้า / Search products..."
+          placeholder="ค้นหาสินค้า..."
           placeholderTextColor={Colors.text.light}
           value={searchQuery}
           onChangeText={setSearch}
@@ -97,7 +97,7 @@ export default function POSScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="search" size={48} color={Colors.text.light} />
-            <Text style={styles.emptyText}>ไม่พบสินค้า / No products found</Text>
+            <Text style={styles.emptyText}>ไม่พบสินค้า</Text>
           </View>
         }
       />
@@ -109,7 +109,7 @@ export default function POSScreen() {
           activeOpacity={0.85}
         >
           <Ionicons name="cart" size={24} color={Colors.surface} />
-          <Text style={styles.cartButtonText}>ดูตะกร้า / View Cart</Text>
+          <Text style={styles.cartButtonText}>ตะกร้า</Text>
           <View style={styles.cartBadge}>
             <Text style={styles.cartBadgeText}>{cartCount}</Text>
           </View>
@@ -122,7 +122,7 @@ export default function POSScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0FDF9',
+    backgroundColor: Colors.background,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -131,14 +131,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: '#D1FAE5',
-    shadowColor: '#0F766E',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     elevation: 2,
   },
   searchIcon: {
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     fontSize: 15,
-    color: '#134E4A',
+    color: Colors.text.primary,
   },
   productGrid: {
     paddingHorizontal: 16,
@@ -164,8 +164,8 @@ const styles = StyleSheet.create({
     paddingTop: 80,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#9CA3AF',
+    fontSize: 15,
+    color: Colors.text.light,
     marginTop: 12,
   },
   cartButton: {
@@ -173,17 +173,17 @@ const styles = StyleSheet.create({
     bottom: 24,
     left: 20,
     right: 20,
-    backgroundColor: '#0F766E',
-    borderRadius: 18,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
     height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F766E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   cartButtonText: {
     color: '#FFFFFF',

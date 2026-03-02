@@ -195,7 +195,8 @@ export const useOrderStore = create<OrderState>()(
 
         set((state) => {
           state.orders = (data || []).map((o: any) => {
-            const rawPayment = o.payment?.[0]
+            // Supabase returns payment as object (not array) because payments.order_id is UNIQUE
+            const rawPayment = Array.isArray(o.payment) ? o.payment[0] : o.payment
             const confirmedByProfile = rawPayment?.confirmed_by_profile ?? undefined
             const payment = rawPayment
               ? { ...rawPayment, confirmed_by_profile: undefined }

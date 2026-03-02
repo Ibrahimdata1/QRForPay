@@ -137,7 +137,7 @@ describe('OrderStore', () => {
       .mockResolvedValueOnce({ error: null });  // orders update
 
     const store = useOrderStore.getState();
-    await store.completeOrder('order-1', { status: 'success' });
+    await store.completeOrder('order-1', { status: 'success' }, 'manual');
 
     expect(mockUpdate).toHaveBeenCalled();
   });

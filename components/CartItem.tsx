@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../constants/colors';
 
 interface CartItemProps {
   name: string;
@@ -21,63 +22,98 @@ export function CartItem({
   const subtotal = price * quantity;
 
   return (
-    <View
-      className="flex-row items-center bg-white rounded-2xl p-3 mb-2"
-      style={{
-        borderWidth: 1,
-        borderColor: '#D1FAE5',
-        shadowColor: '#0F766E',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        elevation: 2,
-      }}
-    >
-      <View className="flex-1 mr-2">
-        <Text className="text-sm font-semibold text-teal-900" numberOfLines={1}>
-          {name}
-        </Text>
-        <Text className="text-xs text-gray-400 mt-0.5">฿{price.toFixed(2)} / ชิ้น</Text>
+    <View style={styles.container}>
+      {/* Left: name + unit price */}
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>{name}</Text>
+        <Text style={styles.unitPrice}>฿{price.toFixed(0)} / ชิ้น</Text>
       </View>
 
-      <View className="flex-row items-center" style={{ gap: 4 }}>
-        <TouchableOpacity
-          style={styles.qtyButton}
-          onPress={onDecrement}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="remove" size={18} color="#0F766E" />
+      {/* Qty controls */}
+      <View style={styles.qtyRow}>
+        <TouchableOpacity style={styles.qtyBtn} onPress={onDecrement} activeOpacity={0.7}>
+          <Ionicons name="remove" size={15} color={Colors.text.secondary} />
         </TouchableOpacity>
-        <Text className="text-base font-bold text-teal-900 text-center" style={{ minWidth: 28 }}>
-          {quantity}
-        </Text>
-        <TouchableOpacity
-          style={styles.qtyButton}
-          onPress={onIncrement}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="add" size={18} color="#0F766E" />
+        <Text style={styles.qty}>{quantity}</Text>
+        <TouchableOpacity style={styles.qtyBtn} onPress={onIncrement} activeOpacity={0.7}>
+          <Ionicons name="add" size={15} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
-      <Text className="text-sm font-bold text-teal-900 ml-3 text-right" style={{ minWidth: 65 }}>
-        ฿{subtotal.toFixed(2)}
-      </Text>
+      {/* Subtotal */}
+      <Text style={styles.total}>฿{subtotal.toFixed(0)}</Text>
 
-      <TouchableOpacity onPress={onRemove} className="p-1.5 ml-2" activeOpacity={0.7}>
-        <Ionicons name="trash-outline" size={18} color="#EF4444" />
+      {/* Delete */}
+      <TouchableOpacity onPress={onRemove} style={styles.deleteBtn} activeOpacity={0.7}>
+        <Ionicons name="trash-outline" size={17} color={Colors.danger} />
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  qtyButton: {
-    width: 32,
-    height: 32,
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  info: {
+    flex: 1,
+    marginRight: 8,
+  },
+  name: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 2,
+  },
+  unitPrice: {
+    fontSize: 12,
+    color: Colors.text.light,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  qtyBtn: {
+    width: 30,
+    height: 30,
     borderRadius: 8,
-    backgroundColor: '#0F766E18',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  qty: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    minWidth: 22,
+    textAlign: 'center',
+  },
+  total: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.primary,
+    minWidth: 62,
+    textAlign: 'right',
+    marginLeft: 10,
+  },
+  deleteBtn: {
+    padding: 6,
+    marginLeft: 6,
   },
 });

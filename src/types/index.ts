@@ -90,3 +90,36 @@ export interface CartItem {
   quantity: number
   subtotal: number
 }
+
+export interface Ingredient {
+  id: string
+  shop_id: string
+  name: string
+  unit: string
+  current_stock: number
+  min_threshold: number
+  cost_per_unit: number
+  expiry_date?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Recipe {
+  id: string
+  product_id: string
+  ingredient_id: string
+  quantity_per_unit: number
+}
+
+export interface StockTransaction {
+  id: string
+  shop_id: string
+  ingredient_id: string
+  transaction_type: 'stock_in' | 'adjustment' | 'waste' | 'auto_deduct'
+  quantity: number
+  reference_id?: string | null
+  note?: string | null
+  created_by?: string | null
+  created_at: string
+}

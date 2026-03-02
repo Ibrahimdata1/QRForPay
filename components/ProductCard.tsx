@@ -1,21 +1,11 @@
-import { TouchableOpacity, View, Text, Image } from 'react-native';
+import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { Product } from '../src/types';
 
-const FOOD_EMOJI: Record<string, string> = {
-  'ข้าวผัดกระเพรา': '🍛',
-  'ก๋วยเตี๋ยวต้มยำ': '🍜',
-  'ข้าวมันไก่': '🍗',
-  'ส้มตำไทย': '🥗',
-  'ชาเย็น': '🧋',
-  'กาแฟเย็น': '☕',
-  'น้ำส้มคั้นสด': '🍊',
-  'สบู่เหลว': '🧴',
-  'แปรงสีฟัน': '🪥',
-  'ผงซักฟอก': '🧺',
-};
+const AVATAR_COLORS = ['#FF8A80', '#80DEEA', '#FFD54F', '#80CBC4', '#CE93D8'];
 
-function getProductEmoji(name: string): string {
-  return FOOD_EMOJI[name] ?? '🛍️';
+function getAvatarColor(name: string): string {
+  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 }
 
 interface ProductCardProps {
@@ -27,68 +17,160 @@ interface ProductCardProps {
 export function ProductCard({ product, onPress, width }: ProductCardProps) {
   const isOutOfStock = product.stock === 0;
   const isLowStock = product.stock > 0 && product.stock <= 10;
-  const emoji = getProductEmoji(product.name);
+  const avatarColor = getAvatarColor(product.name);
+  const avatarLetter = product.name.charAt(0).toUpperCase();
 
   return (
     <TouchableOpacity
       onPress={() => !isOutOfStock && onPress(product)}
       activeOpacity={0.85}
-      style={{ width: width ?? '48%' }}
-      className="mb-3"
+      style={[styles.wrapper, { width: width ?? '48%' }]}
     >
-      <View
-        className={`bg-white rounded-2xl overflow-hidden ${isOutOfStock ? 'opacity-60' : ''}`}
-        style={{
-          shadowColor: '#0F766E',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.12,
-          shadowRadius: 12,
-          elevation: 6,
-        }}
-      >
-        {/* Image / Emoji Area */}
-        <View className="items-center justify-center bg-emerald-50 relative" style={{ height: 120 }}>
+      <View style={[styles.card, isOutOfStock && styles.cardDisabled]}>
+        {/* Image Area */}
+        <View style={styles.imageArea}>
           {product.image_url ? (
             <Image
               source={{ uri: product.image_url }}
-              className="w-full h-full"
+              style={styles.image}
               resizeMode="cover"
             />
           ) : (
-            <Text style={{ fontSize: 56 }}>{emoji}</Text>
+            <View style={[styles.avatarBg, { backgroundColor: avatarColor }]}>
+              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+            </View>
           )}
+
           {/* Out of stock overlay */}
           {isOutOfStock && (
-            <View className="absolute inset-0 bg-black/40 items-center justify-center">
-              <View className="bg-red-500 px-2 py-1 rounded-lg">
-                <Text className="text-white text-xs font-bold">หมดสต็อก</Text>
+            <View style={styles.outOverlay}>
+              <View style={styles.outBadge}>
+                <Text style={styles.outBadgeText}>หมดสต็อก</Text>
               </View>
             </View>
           )}
-          {/* Low stock badge */}
+
+          {/* Low stock badge — top right */}
           {isLowStock && !isOutOfStock && (
-            <View className="absolute top-2 right-2 bg-amber-400 px-2 py-0.5 rounded-full">
-              <Text className="text-white text-xs font-bold">เหลือ {product.stock}</Text>
-            </View>
-          )}
-          {/* In stock badge */}
-          {!isOutOfStock && !isLowStock && (
-            <View className="absolute top-2 right-2 bg-emerald-500 px-2 py-0.5 rounded-full">
-              <Text className="text-white text-xs font-bold">มีสินค้า</Text>
+            <View style={styles.lowStockBadge}>
+              <Text style={styles.lowStockText}>เหลือ {product.stock}</Text>
             </View>
           )}
         </View>
 
-        {/* Info Area */}
-        <View className="px-3 py-2.5">
-          <Text className="text-sm font-semibold text-teal-900 mb-1" numberOfLines={1}>
-            {product.name}
-          </Text>
-          <Text className="text-base font-bold" style={{ color: '#0F766E' }}>
-            ฿{product.price.toFixed(0)}
-          </Text>
+        {/* Info */}
+        <View style={styles.info}>
+          <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>฿{product.price.toFixed(0)}</Text>
+            {!isOutOfStock && (
+              <View style={styles.addBtn}>
+                <Ionicons name="add" size={16} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  wrapper: {
+    marginBottom: 12,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardDisabled: {
+    opacity: 0.55,
+  },
+  imageArea: {
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarBg: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarLetter: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  outOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  outBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  lowStockBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 20,
+  },
+  lowStockText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  info: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  name: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  price: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  addBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#0F766E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

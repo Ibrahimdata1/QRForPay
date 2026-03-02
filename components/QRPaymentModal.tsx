@@ -92,7 +92,7 @@ export function QRPaymentModal({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>ชำระเงินด้วย QR Code</Text>
-        <Text style={styles.subtitle}>Scan to Pay with PromptPay</Text>
+        <Text style={styles.subtitle}>สแกนจ่ายด้วย PromptPay</Text>
       </View>
 
       <Animated.View style={[styles.qrContainer, { transform: [{ scale: pulseAnim }] }]}>
@@ -117,7 +117,7 @@ export function QRPaymentModal({
       </Animated.View>
 
       <View style={styles.amountContainer}>
-        <Text style={styles.amountLabel}>ยอดชำระ / Amount</Text>
+        <Text style={styles.amountLabel}>ยอดชำระ</Text>
         <Text style={styles.amountValue}>฿{amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</Text>
       </View>
 
@@ -130,20 +130,20 @@ export function QRPaymentModal({
             </View>
             <View style={styles.waitingRow}>
               <Ionicons name="hourglass-outline" size={16} color={Colors.warning} />
-              <Text style={styles.waitingText}>รอการชำระเงิน... / Waiting for payment...</Text>
+              <Text style={styles.waitingText}>รอการชำระเงิน...</Text>
             </View>
           </>
         )}
         {status === 'confirmed' && (
           <View style={styles.confirmedRow}>
             <Ionicons name="checkmark-circle" size={20} color={Colors.secondary} />
-            <Text style={styles.confirmedText}>ชำระเงินสำเร็จ / Payment Confirmed</Text>
+            <Text style={styles.confirmedText}>ชำระเงินสำเร็จ</Text>
           </View>
         )}
         {status === 'expired' && (
           <View style={styles.expiredRow}>
             <Ionicons name="close-circle" size={20} color={Colors.danger} />
-            <Text style={styles.expiredText}>หมดเวลา / Payment Expired</Text>
+            <Text style={styles.expiredText}>หมดเวลา</Text>
           </View>
         )}
       </View>
@@ -155,7 +155,7 @@ export function QRPaymentModal({
           activeOpacity={0.8}
         >
           <Ionicons name="checkmark-circle-outline" size={20} color={Colors.surface} />
-          <Text style={styles.manualConfirmText}>ยืนยันรับเงินแล้ว / Confirm Received</Text>
+          <Text style={styles.manualConfirmText}>ยืนยันรับเงินแล้ว</Text>
         </TouchableOpacity>
       )}
 
@@ -175,7 +175,7 @@ export function QRPaymentModal({
         activeOpacity={0.8}
       >
         <Text style={styles.actionButtonText}>
-          {status === 'confirmed' ? 'เสร็จสิ้น / Done' : 'ยกเลิก / Cancel'}
+          {status === 'confirmed' ? 'เสร็จสิ้น' : 'ยกเลิก'}
         </Text>
       </TouchableOpacity>
 

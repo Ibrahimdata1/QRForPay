@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, ActivityIndicator, Alert,
+  ScrollView, StyleSheet, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../src/lib/supabase';
 import { Product, Category } from '../src/types';
+
+// Ensure 'product-images' bucket exists in Supabase Storage (public)
 
 interface ProductFormModalProps {
   visible: boolean;
@@ -20,6 +24,8 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -28,8 +34,50 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
       setPrice(product ? String(product.price) : '');
       setStock(product ? String(product.stock) : '0');
       setCategoryId(product?.category_id ?? null);
+      setImageUrl(product?.image_url ?? '');
     }
   }, [visible, product]);
+
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('ต้องการสิทธิ์เข้าถึงคลังรูปภาพ');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+      const path = `${shopId}/${Date.now()}.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(path);
+
+      setImageUrl(urlData.publicUrl);
+    } catch (e: any) {
+      Alert.alert('อัปโหลดรูปไม่สำเร็จ', e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('กรุณากรอกชื่อสินค้า'); return; }
@@ -43,6 +91,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
         price: priceNum,
         stock: parseInt(stock) || 0,
         category_id: categoryId ?? undefined,
+        image_url: imageUrl || undefined,
       });
       onClose();
     } catch (e: any) {
@@ -64,6 +113,32 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Image Picker */}
+            <View style={styles.imagePickerWrapper}>
+              <TouchableOpacity
+                style={imageUrl ? styles.imagePreviewBox : styles.imagePlaceholderBox}
+                onPress={handlePickImage}
+                disabled={uploading}
+                activeOpacity={0.8}
+              >
+                {uploading ? (
+                  <ActivityIndicator color="#0F766E" size="large" />
+                ) : imageUrl ? (
+                  <>
+                    <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+                    <View style={styles.imageEditOverlay}>
+                      <Ionicons name="pencil" size={14} color="#FFFFFF" />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="camera-outline" size={32} color="#9CA3AF" />
+                    <Text style={styles.imagePlaceholderText}>เพิ่มรูป</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
             {/* Name */}
             <Text style={styles.label}>ชื่อสินค้า *</Text>
             <TextInput
@@ -201,4 +276,50 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   saveBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+
+  imagePickerWrapper: {
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  imagePlaceholderBox: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E8ECF0',
+    borderStyle: 'dashed',
+    backgroundColor: '#F4F6F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  imagePlaceholderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  imagePreviewBox: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+  },
+  imageEditOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#0F766E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

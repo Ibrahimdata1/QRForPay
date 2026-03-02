@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { OrderWithItems } from '../src/types';
 import { useProductStore } from '../src/store/productStore';
+import { Colors } from '../constants/colors';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -23,8 +24,8 @@ const statusLabels: Record<string, string> = {
 };
 const methodLabels: Record<string, string> = {
   qr: 'QR PromptPay',
-  cash: 'เงินสด / Cash',
-  card: 'บัตร / Card',
+  cash: 'เงินสด',
+  card: 'บัตรเครดิต',
 };
 
 interface OrderDetailModalProps {
@@ -84,7 +85,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
             <Text style={styles.orderTitle}>ออเดอร์ #{order.order_number}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '1A' }]}>
             <Text style={[styles.statusText, { color: statusColor }]}>
               {statusLabels[order.status] || order.status}
             </Text>
@@ -116,8 +117,8 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
           </View>
           {(order.discount_amount ?? 0) > 0 && (
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: '#EF4444' }]}>ส่วนลด</Text>
-              <Text style={[styles.summaryValue, { color: '#EF4444' }]}>
+              <Text style={[styles.summaryLabel, { color: Colors.danger }]}>ส่วนลด</Text>
+              <Text style={[styles.summaryValue, { color: Colors.danger }]}>
                 -฿{(order.discount_amount ?? 0).toFixed(2)}
               </Text>
             </View>
@@ -134,7 +135,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
           {/* Payment method */}
           {order.payment_method && (
             <View style={styles.paymentRow}>
-              <Ionicons name="card-outline" size={16} color="#6B7280" />
+              <Ionicons name="card-outline" size={16} color={Colors.text.secondary} />
               <Text style={styles.paymentText}>
                 {methodLabels[order.payment_method] || order.payment_method}
               </Text>
@@ -144,8 +145,8 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
                 </View>
               )}
               {order.payment?.confirmation_type === 'auto' && (
-                <View style={[styles.confirmBadge, { backgroundColor: '#D1FAE5' }]}>
-                  <Text style={[styles.confirmBadgeText, { color: '#059669' }]}>Auto</Text>
+                <View style={[styles.confirmBadge, { backgroundColor: Colors.primaryLight }]}>
+                  <Text style={[styles.confirmBadgeText, { color: Colors.secondary }]}>Auto</Text>
                 </View>
               )}
             </View>
@@ -154,7 +155,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
 
         {/* Close */}
         <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-          <Text style={styles.closeBtnText}>ปิด / Close</Text>
+          <Text style={styles.closeBtnText}>ปิด</Text>
         </TouchableOpacity>
       </Animated.View>
     </Modal>
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#DEE2E6',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
@@ -193,16 +194,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#D1FAE5',
+    borderBottomColor: Colors.border,
   },
   orderTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#134E4A',
+    color: Colors.text.primary,
   },
   orderDate: {
     fontSize: 13,
-    color: '#6B7280',
+    color: Colors.text.secondary,
     marginTop: 2,
   },
   statusBadge: {
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: Colors.text.secondary,
     marginTop: 16,
     marginBottom: 10,
     textTransform: 'uppercase',
@@ -232,27 +233,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0FDF9',
+    borderBottomColor: Colors.borderLight,
   },
   itemLeft: { flex: 1, marginRight: 12 },
   itemName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#134E4A',
+    color: Colors.text.primary,
   },
   itemUnit: {
     fontSize: 12,
-    color: '#6B7280',
+    color: Colors.text.secondary,
     marginTop: 2,
   },
   itemSubtotal: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F766E',
+    color: Colors.primary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: Colors.border,
     marginVertical: 12,
   },
   summaryRow: {
@@ -262,28 +263,28 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Colors.text.secondary,
   },
   summaryValue: {
     fontSize: 14,
-    color: '#134E4A',
+    color: Colors.text.primary,
     fontWeight: '500',
   },
   totalRow: {
     marginTop: 6,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#D1FAE5',
+    borderTopColor: Colors.border,
   },
   totalLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#134E4A',
+    color: Colors.text.primary,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F766E',
+    color: Colors.primary,
   },
   paymentRow: {
     flexDirection: 'row',
@@ -294,7 +295,7 @@ const styles = StyleSheet.create({
   },
   paymentText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Colors.text.secondary,
     flex: 1,
   },
   confirmBadge: {
@@ -312,7 +313,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 16,
     height: 50,
-    backgroundColor: '#0F766E',
+    backgroundColor: Colors.primary,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
