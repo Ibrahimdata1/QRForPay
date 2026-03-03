@@ -84,10 +84,19 @@ export const useOrderStore = create<OrderState>()(
         if (itemsError) throw itemsError
 
         // 3. Insert pending payment
-        const qrPayload =
-          paymentMethod === 'qr'
-            ? generatePromptPayPayload(Config.promptpay.id, totalAmount)
-            : undefined
+        // H-4: Fetch promptpay_id from shops table rather than bundled EXPO_PUBLIC env var
+        let qrPayload: string | undefined = undefined
+        if (paymentMethod === 'qr') {
+          const { data: shopRow } = await supabase
+            .from('shops')
+            .select('promptpay_id')
+            .eq('id', shopId)
+            .single()
+          const promptPayId = shopRow?.promptpay_id ?? ''
+          if (promptPayId) {
+            qrPayload = generatePromptPayPayload(promptPayId, totalAmount)
+          }
+        }
 
         const { data: payment, error: paymentError } = await supabase
           .from('payments')

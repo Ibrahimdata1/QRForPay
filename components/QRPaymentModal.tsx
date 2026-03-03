@@ -4,6 +4,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { Config } from '../constants/config';
+import { generatePromptPayPayload } from '../src/lib/qr';
 
 type PaymentStatus = 'waiting' | 'confirmed' | 'expired';
 
@@ -19,15 +20,12 @@ interface QRPaymentModalProps {
   cashierName?: string;
 }
 
-function generatePromptPayQRData(promptPayId: string, amount: number): string {
-  // Simplified PromptPay QR payload format
-  // In production, use a proper EMVCo QR code generator
-  return `promptpay://${promptPayId}?amount=${amount.toFixed(2)}&currency=${Config.qr.currency}`;
-}
+// L-4: Removed non-EMV promptpay:// URI fallback.
+// generatePromptPayPayload from src/lib/qr.ts produces a proper BOT EMVCo QR payload.
 
 export function QRPaymentModal({
   amount,
-  promptPayId = Config.promptpay.id,
+  promptPayId = '',
   qrPayload,
   paymentStatus,
   onConfirmed,
@@ -86,7 +84,8 @@ export function QRPaymentModal({
     return `${min}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const qrData = qrPayload || generatePromptPayQRData(promptPayId, amount);
+  // L-4: Use proper EMVCo PromptPay payload; promptPayId should be fetched from the shop row (H-4).
+  const qrData = qrPayload || (promptPayId ? generatePromptPayPayload(promptPayId, amount) : '');
 
   return (
     <View style={styles.container}>

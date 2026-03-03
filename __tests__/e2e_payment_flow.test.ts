@@ -161,8 +161,9 @@ describe('E2E Payment Flow', () => {
 
       // Step 2: Create order with QR payment
       mockSingle
-        .mockResolvedValueOnce({ data: mockOrderResponse, error: null })   // order insert
-        .mockResolvedValueOnce({ data: mockPaymentResponse, error: null }); // payment insert
+        .mockResolvedValueOnce({ data: mockOrderResponse, error: null })           // order insert
+        .mockResolvedValueOnce({ data: { promptpay_id: '0812345678' }, error: null }) // shops fetch (H-4)
+        .mockResolvedValueOnce({ data: mockPaymentResponse, error: null });        // payment insert
       mockInsert
         .mockReturnValueOnce({ select: mockSelect })  // orders
         .mockResolvedValueOnce({ error: null })        // order_items

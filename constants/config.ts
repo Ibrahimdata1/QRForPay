@@ -12,7 +12,8 @@ export const Config = {
     pollInterval: 3,
     currency: 'THB',
   },
-  promptpay: {
-    id: process.env.EXPO_PUBLIC_PROMPTPAY_ID || '',
-  },
+  // H-4: PromptPay ID should be fetched from shops table, not bundled in client.
+  // EXPO_PUBLIC_* vars are embedded in the JS bundle and visible to all users.
+  // Retrieve promptpay_id from the authenticated shop row instead.
+  // promptpay: { id: process.env.EXPO_PUBLIC_PROMPTPAY_ID || '' },
 };

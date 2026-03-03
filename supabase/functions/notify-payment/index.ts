@@ -17,6 +17,16 @@ const supabase = createClient(
 
 Deno.serve(async (req: Request) => {
   try {
+    // Verify this request came from Supabase webhook (not arbitrary caller)
+    const webhookSecret = Deno.env.get('WEBHOOK_SECRET')
+    if (webhookSecret) {
+      const signature = req.headers.get('x-supabase-signature') ?? ''
+      // Simple token check — upgrade to HMAC when Supabase supports it
+      if (signature !== webhookSecret) {
+        return new Response('unauthorized', { status: 401 })
+      }
+    }
+
     const payload = await req.json()
     const payment = payload.record
 

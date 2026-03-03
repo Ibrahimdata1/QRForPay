@@ -35,7 +35,8 @@ CREATE POLICY "Users can view profiles in their shop"
 
 CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
-  USING (id = auth.uid());
+  USING (id = auth.uid())
+  WITH CHECK (id = auth.uid() AND role = (SELECT role FROM profiles WHERE id = auth.uid()) AND shop_id = (SELECT shop_id FROM profiles WHERE id = auth.uid()));
 
 CREATE POLICY "Owners can manage profiles in their shop"
   ON profiles FOR ALL
@@ -147,6 +148,8 @@ CREATE POLICY "Users can create payments for their shop orders"
     )
   );
 
+-- ลบ policy เดิม แล้วสร้างใหม่ (H-2: prevent cashier from directly marking payment success)
+DROP POLICY IF EXISTS "Users can update payments for their shop orders" ON payments;
 CREATE POLICY "Users can update payments for their shop orders"
   ON payments FOR UPDATE
   USING (
@@ -154,6 +157,17 @@ CREATE POLICY "Users can update payments for their shop orders"
       SELECT 1 FROM orders
       WHERE orders.id = payments.order_id
         AND orders.shop_id = get_my_shop_id()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM orders
+      WHERE orders.id = payments.order_id
+        AND orders.shop_id = get_my_shop_id()
+    )
+    AND (
+      get_my_role() = 'owner'
+      OR get_my_role() = 'cashier'
     )
   );
 
