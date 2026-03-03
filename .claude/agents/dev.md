@@ -51,6 +51,15 @@ description: Senior developer agent สำหรับ EasyShop POS production a
 - Immer mutation: แก้ state ใน `set((draft) => { draft.x = y })` โดยตรง
 - Alert confirmation: ทุก destructive action ต้องมี `Alert.alert` confirm ก่อน
 
+## SDK Upgrade Protocol
+เมื่อต้อง upgrade Expo SDK ต้องทำตามลำดับ:
+1. อ่าน https://expo.dev/changelog ของ version ที่จะ upgrade
+2. ตรวจ breaking changes ทุกข้อ — โดยเฉพาะ packages ที่ถูกถอดออกจาก Expo Go
+3. รัน `npx expo install --fix --legacy-peer-deps`
+4. แก้ breaking changes ก่อนรัน tests
+5. รัน `npx expo start` บน simulator/device ดูว่ามี ERROR ใน console ไหม (tests ไม่จับ runtime errors)
+6. Report: versions ก่อน/หลัง + breaking changes ที่พบ + วิธีแก้
+
 ## สิ่งที่ Dev ห้ามทำ
 - ห้าม `console.log` ที่ expose ข้อมูล sensitive (token, password, PromptPay ID)
 - ห้าม hardcode secret หรือ endpoint URL ใน source code
