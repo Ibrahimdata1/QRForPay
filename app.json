@@ -44,7 +44,8 @@
           "cameraPermission": "Allow EasyShop to access your camera for QR code scanning."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
