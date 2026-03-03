@@ -1,4 +1,5 @@
 import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Category {
   id: string;
@@ -14,32 +15,45 @@ interface CategoryFilterProps {
 
 export function CategoryFilter({ categories, selected, onSelect }: CategoryFilterProps) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-    >
-      {categories.map((cat) => {
-        const isActive = selected === cat.id;
-        return (
-          <TouchableOpacity
-            key={cat.id}
-            onPress={() => onSelect(cat.id)}
-            activeOpacity={0.7}
-            style={[styles.chip, isActive && styles.chipActive]}
-          >
-            {isActive && <View style={styles.activeDot} />}
-            <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.container}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={true}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {categories.map((cat) => {
+          const isActive = selected === cat.id;
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => onSelect(cat.id)}
+              activeOpacity={0.7}
+              style={[styles.chip, isActive && styles.chipActive]}
+            >
+              {isActive && <View style={styles.activeDot} />}
+              <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      {/* Fade overlay — visual hint that list is scrollable */}
+      <LinearGradient
+        colors={['rgba(244,246,248,0)', 'rgba(244,246,248,0.95)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.fadeRight}
+        pointerEvents="none"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -76,5 +90,12 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: '#FFFFFF',
+  },
+  fadeRight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 48,
   },
 });

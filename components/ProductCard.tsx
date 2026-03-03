@@ -1,4 +1,5 @@
-import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
+import { useRef } from 'react';
+import { TouchableOpacity, View, Text, Image, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Product } from '../src/types';
 import { Colors } from '../constants/colors';
@@ -21,57 +22,79 @@ export function ProductCard({ product, onPress, width }: ProductCardProps) {
   const avatarColor = getAvatarColor(product.name);
   const avatarLetter = product.name.charAt(0).toUpperCase();
 
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    if (isOutOfStock) return;
+    // Scale down then snap back — gives clear tactile-like feedback
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.93,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    onPress(product);
+  };
+
   return (
     <TouchableOpacity
-      onPress={() => !isOutOfStock && onPress(product)}
+      onPress={handlePress}
       activeOpacity={0.85}
       style={[styles.wrapper, { width: width ?? '48%' }]}
     >
-      <View style={[styles.card, isOutOfStock && styles.cardDisabled]}>
-        {/* Image Area */}
-        <View style={styles.imageArea}>
-          {product.image_url ? (
-            <Image
-              source={{ uri: product.image_url }}
-              style={styles.image}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.avatarBg, { backgroundColor: avatarColor }]}>
-              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-            </View>
-          )}
-
-          {/* Out of stock overlay */}
-          {isOutOfStock && (
-            <View style={styles.outOverlay}>
-              <View style={styles.outBadge}>
-                <Text style={styles.outBadgeText}>หมดสต็อก</Text>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <View style={[styles.card, isOutOfStock && styles.cardDisabled]}>
+          {/* Image Area */}
+          <View style={styles.imageArea}>
+            {product.image_url ? (
+              <Image
+                source={{ uri: product.image_url }}
+                style={styles.image}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.avatarBg, { backgroundColor: avatarColor }]}>
+                <Text style={styles.avatarLetter}>{avatarLetter}</Text>
               </View>
-            </View>
-          )}
+            )}
 
-          {/* Low stock badge — top right */}
-          {isLowStock && !isOutOfStock && (
-            <View style={styles.lowStockBadge}>
-              <Text style={styles.lowStockText}>เหลือ {product.stock}</Text>
-            </View>
-          )}
-        </View>
+            {/* Out of stock overlay */}
+            {isOutOfStock && (
+              <View style={styles.outOverlay}>
+                <View style={styles.outBadge}>
+                  <Text style={styles.outBadgeText}>หมดสต็อก</Text>
+                </View>
+              </View>
+            )}
 
-        {/* Info */}
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.price}>฿{product.price.toFixed(0)}</Text>
-            {!isOutOfStock && (
-              <View style={styles.addBtn}>
-                <Ionicons name="add" size={16} color="#FFFFFF" />
+            {/* Low stock badge — top right */}
+            {isLowStock && !isOutOfStock && (
+              <View style={styles.lowStockBadge}>
+                <Text style={styles.lowStockText}>เหลือ {product.stock}</Text>
               </View>
             )}
           </View>
+
+          {/* Info */}
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>฿{product.price.toFixed(0)}</Text>
+              {!isOutOfStock && (
+                <View style={styles.addBtn}>
+                  <Ionicons name="add" size={16} color="#FFFFFF" />
+                </View>
+              )}
+            </View>
+          </View>
         </View>
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 }

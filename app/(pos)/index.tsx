@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,30 @@ export default function POSScreen() {
 
   const addItem = useCartStore((s) => s.addItem);
   const cartCount = useCartStore(selectItemCount);
+
+  // Toast state
+  const [toastProduct, setToastProduct] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (name: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastProduct(name);
+    toastOpacity.setValue(0);
+    Animated.timing(toastOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      toastTimer.current = setTimeout(() => {
+        Animated.timing(toastOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => setToastProduct(null));
+      }, 1500);
+    });
+  };
 
   useEffect(() => {
     if (shop?.id) {
@@ -93,12 +118,25 @@ export default function POSScreen() {
         contentContainerStyle={styles.productGrid}
         columnWrapperStyle={styles.columnWrapper}
         renderItem={({ item }) => (
-          <ProductCard product={item} onPress={(p) => addItem(p)} />
+          <ProductCard
+            product={item}
+            onPress={(p) => {
+              addItem(p);
+              showToast(p.name);
+            }}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="search" size={48} color={Colors.text.light} />
             <Text style={styles.emptyText}>ไม่พบสินค้า</Text>
+            {selectedCategoryId ? (
+              <TouchableOpacity onPress={() => setCategory(null)} activeOpacity={0.7}>
+                <Text style={styles.emptyHintLink}>ลองกด &quot;ทั้งหมด&quot; เพื่อดูสินค้าทั้งหมด</Text>
+              </TouchableOpacity>
+            ) : searchQuery ? (
+              <Text style={styles.emptyHint}>ลองค้นหาด้วยคำอื่น</Text>
+            ) : null}
           </View>
         }
       />
@@ -115,6 +153,12 @@ export default function POSScreen() {
             <Text style={styles.cartBadgeText}>{cartCount}</Text>
           </View>
         </TouchableOpacity>
+      )}
+
+      {toastProduct !== null && (
+        <Animated.View style={[styles.toast, { opacity: toastOpacity }]} pointerEvents="none">
+          <Text style={styles.toastText}>✓ เพิ่ม {toastProduct} แล้ว</Text>
+        </Animated.View>
       )}
     </View>
   );
@@ -168,6 +212,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text.light,
     marginTop: 12,
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: Colors.text.light,
+    marginTop: 6,
+    opacity: 0.75,
+  },
+  emptyHintLink: {
+    fontSize: 13,
+    color: Colors.primary,
+    marginTop: 6,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    backgroundColor: Colors.success,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   cartButton: {
     position: 'absolute',
