@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   View,
   Text,
@@ -32,7 +33,7 @@ export default function POSScreen() {
   const setSearch = useProductStore((s) => s.setSearch);
   const setCategory = useProductStore((s) => s.setCategory);
   const isLoading = useProductStore((s) => s.isLoading);
-  const filteredProducts = useProductStore(selectFilteredProducts);
+  const filteredProducts = useProductStore(useShallow(selectFilteredProducts));
 
   const addItem = useCartStore((s) => s.addItem);
   const cartCount = useCartStore(selectItemCount);
