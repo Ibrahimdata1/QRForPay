@@ -237,8 +237,30 @@ export default function CartScreen() {
             price={item.product.price}
             quantity={item.quantity}
             onIncrement={() => updateQuantity(item.product.id, item.quantity + 1)}
-            onDecrement={() => updateQuantity(item.product.id, item.quantity - 1)}
-            onRemove={() => removeItem(item.product.id)}
+            onDecrement={() => {
+              if (item.quantity <= 1) {
+                Alert.alert(
+                  'ลบสินค้า',
+                  `ต้องการลบ "${item.product.name}" ออกจากตะกร้า?`,
+                  [
+                    { text: 'ยกเลิก', style: 'cancel' },
+                    { text: 'ลบ', style: 'destructive', onPress: () => removeItem(item.product.id) },
+                  ]
+                );
+              } else {
+                updateQuantity(item.product.id, item.quantity - 1);
+              }
+            }}
+            onRemove={() =>
+              Alert.alert(
+                'ลบสินค้า',
+                `ต้องการลบ "${item.product.name}" ออกจากตะกร้า?`,
+                [
+                  { text: 'ยกเลิก', style: 'cancel' },
+                  { text: 'ลบ', style: 'destructive', onPress: () => removeItem(item.product.id) },
+                ]
+              )
+            }
           />
         )}
         ListEmptyComponent={

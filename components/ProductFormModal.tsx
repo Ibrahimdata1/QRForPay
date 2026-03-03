@@ -60,12 +60,12 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
     setUploading(true);
     try {
       const response = await fetch(asset.uri);
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
       const path = `${shopId}/${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -75,7 +75,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
 
       setImageUrl(urlData.publicUrl);
     } catch (e: any) {
-      Alert.alert('อัปโหลดรูปไม่สำเร็จ', e.message);
+      Alert.alert('อัปโหลดรูปไม่สำเร็จ', 'กรุณาตรวจสอบสัญญาณอินเทอร์เน็ตแล้วลองใหม่');
     } finally {
       setUploading(false);
     }
@@ -125,7 +125,10 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
                 activeOpacity={0.8}
               >
                 {uploading ? (
-                  <ActivityIndicator color={Colors.primary} size="large" />
+                  <>
+                    <ActivityIndicator color={Colors.primary} size="large" />
+                    <Text style={styles.imagePlaceholderText}>กำลังอัปโหลด...</Text>
+                  </>
                 ) : imageUrl ? (
                   <>
                     <Image source={{ uri: imageUrl }} style={styles.imagePreview} />

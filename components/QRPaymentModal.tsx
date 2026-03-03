@@ -95,14 +95,19 @@ export function QRPaymentModal({
       </View>
 
       <Animated.View style={[styles.qrContainer, { transform: [{ scale: pulseAnim }] }]}>
-        {status === 'waiting' && (
+        {status === 'waiting' && qrData ? (
           <QRCode
             value={qrData}
             size={220}
             color={Colors.qr.foreground}
             backgroundColor={Colors.qr.background}
           />
-        )}
+        ) : status === 'waiting' ? (
+          <View style={styles.qrErrorBox}>
+            <Ionicons name="warning-outline" size={40} color={Colors.warning} />
+            <Text style={styles.qrErrorText}>ยังไม่ได้ตั้งค่า PromptPay{'\n'}ไปที่ ตั้งค่า → PromptPay ID</Text>
+          </View>
+        ) : null}
         {status === 'confirmed' && (
           <View style={styles.statusIcon}>
             <Ionicons name="checkmark-circle" size={100} color={Colors.secondary} />
@@ -256,6 +261,18 @@ const styles = StyleSheet.create({
   statusIcon: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  qrErrorBox: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+  },
+  qrErrorText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   amountContainer: {
     alignItems: 'center',

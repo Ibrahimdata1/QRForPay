@@ -12,6 +12,7 @@ export default function QRPaymentScreen() {
   const subscribeToOrder = useOrderStore((s) => s.subscribeToOrder);
   const completeOrder = useOrderStore((s) => s.completeOrder);
   const profile = useAuthStore((s) => s.profile);
+  const shop = useAuthStore((s) => s.shop);
 
   useEffect(() => {
     if (!orderId) return;
@@ -74,6 +75,7 @@ export default function QRPaymentScreen() {
       <QRPaymentModal
         amount={amount}
         qrPayload={qrPayload ?? undefined}
+        promptPayId={shop?.promptpay_id ?? undefined}
         paymentStatus={currentOrder.payment?.status}
         onConfirmed={handleConfirmed}
         onCancel={handleCancel}
