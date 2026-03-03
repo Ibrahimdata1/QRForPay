@@ -26,11 +26,13 @@ $$ LANGUAGE plpgsql;
 
 -- Shops
 CREATE TABLE shops (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name       TEXT NOT NULL,
-  owner_id   UUID,  -- filled after profiles exist
-  logo_url   TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  owner_id      UUID,  -- filled after profiles exist
+  logo_url      TEXT,
+  promptpay_id  TEXT NOT NULL DEFAULT '',
+  tax_rate      NUMERIC(5,2) NOT NULL DEFAULT 7.00,
+  created_at    TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE shops ENABLE ROW LEVEL SECURITY;
 

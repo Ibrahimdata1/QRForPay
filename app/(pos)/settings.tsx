@@ -74,7 +74,7 @@ export default function SettingsScreen() {
       Alert.alert('บันทึกแล้ว', 'อัปเดตข้อมูลร้านเรียบร้อยแล้ว');
       setIsDirty(false);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'ไม่สามารถบันทึกได้';
+      const message = (err as any)?.message ?? 'ไม่สามารถบันทึกได้';
       Alert.alert('เกิดข้อผิดพลาด', message);
     } finally {
       setIsSaving(false);
