@@ -143,8 +143,9 @@ export const useAuthStore = create<AuthState>()(
 
     registerPushToken: async (userId: string) => {
       try {
-        // Push notifications only work on physical devices
+        // Push notifications require a development build — not available in Expo Go (SDK 53+)
         if (Platform.OS === 'web') return
+        if (Constants.executionEnvironment === 'storeClient') return // Expo Go — skip silently
 
         const { status: existingStatus } = await Notifications.getPermissionsAsync()
         let finalStatus = existingStatus
