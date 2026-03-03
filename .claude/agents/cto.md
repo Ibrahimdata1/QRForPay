@@ -18,7 +18,7 @@ description: CTO agent. Tech lead สำหรับ EasyShop POS ที่ depl
 | dev | implement feature, fix bug, refactor | ยังไม่ได้วิเคราะห์ root cause |
 | uxui | audit UI/UX ระบบ, visual inconsistency | งานที่ไม่เกี่ยวกับหน้าจอ |
 | qa | ตรวจ test coverage, regression, boundary cases | ก่อน dev แก้เสร็จ |
-| security | audit auth/RLS/secret ทุก sprint | ถ้าเพิ่ง audit ไปไม่นาน |
+| security | audit auth/RLS/secret — auto-trigger เมื่อแก้ supabase/* หรือ authStore | งานที่ไม่ยุ่งกับ DB/auth เลย |
 
 ## Production Release Gate (ต้องครบทุกข้อ)
 ```
@@ -46,26 +46,37 @@ description: CTO agent. Tech lead สำหรับ EasyShop POS ที่ depl
 3. ถ้า bug หลุดเพราะ agent บกพร่อง → อัพเดต agent definition ทันที
 4. สร้าง regression test เพื่อไม่ให้เกิดซ้ำ
 
-## Full QA Pipeline
+## Full QA Pipeline (ลำดับห้ามสลับ)
 ```
-customer reports issue
+customer หรือ owner พบปัญหา → รายงาน CTO
     ↓
-CTO: แปล "ชาวบ้าน" → technical spec (file:line, root cause hypothesis)
+CTO: แปล feedback → technical spec (root cause hypothesis, file:line)
     ↓
-CTO: assign dev + uxui (ต่าง file, ไม่ overlap)
+CTO: assign dev (fix code) + uxui (ถ้ามี visual issue)
     ↓
-dev/uxui: แก้ → report back พร้อม test pass count
+dev/uxui: แก้ → npx jest pass → report CTO
     ↓
-qa: verify boundary + coverage + regression → sign off
+QA: ตรวจ system ทั้งหมด (functional correctness, coverage, integration gaps)
+  → QA sign-off: "ระบบทำงานถูกต้อง"
     ↓
-security: check ถ้ามีการแก้ auth/DB/storage
+security: check ถ้ามีการแก้ supabase/* หรือ authStore (auto-trigger)
     ↓
 CTO: production gate checklist ครบ?
     ↓ YES
-customer: re-test เฉพาะ area ที่แก้ + ทำ full flow 1 รอบ
+customer: ทดสอบ UX/UI จากมุมผู้ใช้จริง (ความสวย ความสะดวก ความสับสน)
+  → customer report: "ใช้งานได้ดี / มีอะไรที่ไม่ชอบ"
     ↓ PASS
 CTO: commit + push + report to Owner
 ```
+
+## Role Boundaries (ห้ามสลับ)
+| Agent | ตรวจอะไร | ไม่ตรวจอะไร |
+|-------|---------|------------|
+| dev | implement + fix code | UX, testing |
+| uxui | visual audit, design system | functional logic |
+| qa | system works? feature ครบ? | ดูสวยไหม? ใช้ง่ายไหม? |
+| security | auth, RLS, secrets | UX, functionality |
+| customer | ดูดีไหม? ใช้สบายไหม? สับสนไหม? | technical root cause |
 
 ## Token-Saving Rules
 - Fix < 5 lines → CTO ทำเองไม่ต้อง spawn agent

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
@@ -41,19 +42,22 @@ export default function OrdersScreen() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const isLoading = useOrderStore((s) => s.isLoading);
+  const fetchError = useOrderStore((s) => s.fetchError);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
 
-  useEffect(() => {
-    if (shop?.id) {
-      fetchOrders(shop.id);
-    }
-  }, [shop?.id]);
+  useFocusEffect(
+    useCallback(() => {
+      if (shop?.id) {
+        fetchOrders(shop.id);
+      }
+    }, [shop?.id])
+  );
 
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
-    const date = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    const date = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', calendar: 'gregory' });
     const time = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     return `${date}  ${time}`;
   };
@@ -136,8 +140,7 @@ export default function OrdersScreen() {
 
   const filteredOrders = orders.filter(order => {
     const matchSearch = searchText === '' ||
-      String(order.order_number).includes(searchText) ||
-      (order.total_amount && String(order.total_amount).includes(searchText));
+      String(order.order_number).includes(searchText);
     const matchStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -152,42 +155,56 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Search */}
-      <TextInput
-        style={{ margin: 12, padding: 10, borderRadius: 10, borderWidth: 1,
-          borderColor: Colors.border, backgroundColor: Colors.surface,
-          fontSize: 14, color: Colors.text.primary }}
-        placeholder="ค้นหาเลขออเดอร์..."
-        placeholderTextColor={Colors.text.light}
-        value={searchText}
-        onChangeText={setSearchText}
-      />
-      {/* Status filter pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingBottom: 8 }}>
-        {(['all', 'pending', 'completed', 'cancelled'] as const).map(s => (
-          <TouchableOpacity key={s}
-            style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-              backgroundColor: statusFilter === s ? Colors.primary : Colors.surface,
-              borderWidth: 1, borderColor: statusFilter === s ? Colors.primary : Colors.border }}
-            onPress={() => setStatusFilter(s)}>
-            <Text style={{ color: statusFilter === s ? '#fff' : Colors.text.secondary, fontSize: 13 }}>
-              {s === 'all' ? 'ทั้งหมด' : s === 'pending' ? 'รอ' : s === 'completed' ? 'สำเร็จ' : 'ยกเลิก'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Fetch error banner */}
+      {fetchError ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="wifi-outline" size={16} color="#B45309" />
+          <Text style={styles.errorBannerText}>{fetchError}</Text>
+        </View>
+      ) : null}
       <FlatList
+        style={{ flex: 1 }}
         data={filteredOrders}
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
         contentContainerStyle={styles.listContent}
         onRefresh={() => shop?.id && fetchOrders(shop.id)}
         refreshing={isLoading}
+        ListHeaderComponent={
+          <View>
+            {/* Search */}
+            <TextInput
+              style={styles.searchInput}
+              placeholder="ค้นหาเลขออเดอร์..."
+              placeholderTextColor={Colors.text.light}
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+            {/* Status filter pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}>
+              {(['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const).map(s => (
+                <TouchableOpacity key={s}
+                  style={[styles.filterPill,
+                    statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
+                  onPress={() => setStatusFilter(s)}>
+                  <Text style={[styles.filterPillText,
+                    statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                    {s === 'all' ? 'ทั้งหมด' : s === 'pending' ? 'รอ' : s === 'confirmed' ? 'ยืนยันแล้ว' : s === 'completed' ? 'สำเร็จ' : 'ยกเลิก'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={64} color={Colors.text.light} />
-            <Text style={styles.emptyText}>ยังไม่มีรายการ</Text>
+            <Text style={styles.emptyText}>
+              {searchText !== '' || statusFilter !== 'all'
+                ? 'ไม่พบออเดอร์ที่ตรงกับการค้นหา'
+                : 'ยังไม่มีรายการ'}
+            </Text>
           </View>
         }
       />
@@ -206,7 +223,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  searchInput: {
+    margin: 12,
+    marginBottom: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    fontSize: 14,
+    color: Colors.text.primary,
+  },
+  filterRow: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 8,
+    alignItems: 'center',
+  },
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterPillInactive: {
+    backgroundColor: Colors.surface,
+    borderColor: Colors.border,
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
+  },
+  filterPillTextInactive: {
+    color: Colors.text.secondary,
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
@@ -240,11 +299,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text.primary,
+    flex: 1,
+    marginRight: 8,
   },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
+    flexShrink: 0,
   },
   statusText: {
     fontSize: 12,
@@ -313,5 +375,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text.light,
     marginTop: 12,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FCD34D',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: '#B45309',
+    flex: 1,
   },
 });

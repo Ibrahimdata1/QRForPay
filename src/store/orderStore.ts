@@ -9,6 +9,7 @@ interface OrderState {
   orders: OrderWithItems[]
   currentOrder: OrderWithItems | null
   isLoading: boolean
+  fetchError: string | null
 
   createOrder: (
     shopId: string,
@@ -29,6 +30,7 @@ export const useOrderStore = create<OrderState>()(
     orders: [],
     currentOrder: null,
     isLoading: false,
+    fetchError: null,
 
     createOrder: async (
       shopId: string,
@@ -190,6 +192,7 @@ export const useOrderStore = create<OrderState>()(
     fetchOrders: async (shopId: string, limit: number = 50) => {
       set((state) => {
         state.isLoading = true
+        state.fetchError = null
       })
 
       try {
@@ -218,9 +221,10 @@ export const useOrderStore = create<OrderState>()(
           }) as OrderWithItems[]
           state.isLoading = false
         })
-      } catch (err) {
+      } catch (err: any) {
         set((state) => {
           state.isLoading = false
+          state.fetchError = err?.message ?? 'โหลดรายการออเดอร์ไม่ได้ กรุณาตรวจสอบสัญญาณอินเทอร์เน็ต'
         })
       }
     },

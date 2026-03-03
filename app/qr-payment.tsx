@@ -5,6 +5,7 @@ import { QRPaymentModal } from '../components/QRPaymentModal';
 import { Colors } from '../constants/colors';
 import { useOrderStore } from '../src/store/orderStore';
 import { useAuthStore } from '../src/store/authStore';
+import { useCartStore } from '../src/store/cartStore';
 
 export default function QRPaymentScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -13,6 +14,7 @@ export default function QRPaymentScreen() {
   const completeOrder = useOrderStore((s) => s.completeOrder);
   const profile = useAuthStore((s) => s.profile);
   const shop = useAuthStore((s) => s.shop);
+  const clearCart = useCartStore((s) => s.clearCart);
 
   useEffect(() => {
     if (!orderId) return;
@@ -24,6 +26,7 @@ export default function QRPaymentScreen() {
   }, [orderId]);
 
   const handleConfirmed = () => {
+    clearCart();
     router.replace('/(pos)');
   };
 
@@ -31,6 +34,7 @@ export default function QRPaymentScreen() {
     if (!orderId || !profile) return;
     try {
       await completeOrder(orderId, {}, 'manual', profile.id);
+      clearCart();
       router.replace('/(pos)');
     } catch {
       // Best effort

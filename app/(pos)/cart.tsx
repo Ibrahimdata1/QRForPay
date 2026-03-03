@@ -39,6 +39,7 @@ export default function CartScreen() {
   const total = useCartStore(selectGrandTotal);
 
   const createOrder = useOrderStore((s) => s.createOrder);
+  const completeOrder = useOrderStore((s) => s.completeOrder);
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
 
@@ -168,7 +169,7 @@ export default function CartScreen() {
         onPress: async () => {
           setIsCreatingOrder(true);
           try {
-            await createOrder(
+            const order = await createOrder(
               shop.id,
               profile.id,
               items,
@@ -176,6 +177,8 @@ export default function CartScreen() {
               discount,
               taxRate
             );
+            // Cash is accepted in person — complete immediately
+            await completeOrder(order.id, {}, 'manual', profile.id);
             clearCart();
             setCashReceived('');
             if (cashReceivedNum > currentTotal) {
@@ -683,7 +686,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 10,
+    backgroundColor: Colors.background,
+    opacity: 0.9,
   },
   discountLeft: {
     flexDirection: 'row',

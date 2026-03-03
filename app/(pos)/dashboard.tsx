@@ -31,6 +31,7 @@ export default function DashboardScreen() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!shop?.id) return;
@@ -39,6 +40,8 @@ export default function DashboardScreen() {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+
+    setFetchError(null);
 
     try {
       // Fetch completed orders for today
@@ -102,7 +105,7 @@ export default function DashboardScreen() {
         setTopProducts([]);
       }
     } catch (err) {
-      // Silently handle — display will show zeros
+      setFetchError('โหลดข้อมูลไม่สำเร็จ กรุณาดึงลงเพื่อลองใหม่');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -138,6 +141,14 @@ export default function DashboardScreen() {
       <Text style={styles.dateLabel}>
         {new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
       </Text>
+
+      {/* Fetch error banner */}
+      {fetchError ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="cloud-offline-outline" size={20} color="#B45309" />
+          <Text style={styles.errorBannerText}>{fetchError}</Text>
+        </View>
+      ) : null}
 
       {/* Stat cards row */}
       <View style={styles.statsRow}>
@@ -307,6 +318,24 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: Colors.text.light,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: '#B45309',
+    flex: 1,
+    fontWeight: '500',
   },
   productRow: {
     flexDirection: 'row',

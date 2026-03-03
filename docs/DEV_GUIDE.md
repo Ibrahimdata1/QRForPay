@@ -1,5 +1,28 @@
 # Dev Guide — EasyShop POS
 
+## UX Requirements (จาก Customer Testing — 2026-03-04)
+
+### R-UX-01: ข้อความทุกจุดต้องเป็นภาษาไทย
+- Empty state ทุกหน้าต้องเป็นภาษาไทยเท่านั้น ห้ามมีภาษาอังกฤษปน
+- Label สำคัญเช่น "PromptPay ID" ควรมี subtitle ภาษาไทยอธิบาย
+- **ไฟล์**: `app/(pos)/products.tsx` — empty state "No products found" → แก้เป็น "ยังไม่มีสินค้า"
+
+### R-UX-02: วันที่ต้องแสดงชัดเจน ไม่งง
+- รูปแบบวันที่ในแอพต้องไม่แสดง "69" (ปี พ.ศ. 2 หลัก) เพราะดูผิดพลาด
+- ใช้ปี ค.ศ. เต็ม หรือ พ.ศ. เต็ม (2569) ไม่ใช่ย่อ
+- **ไฟล์**: `app/(pos)/orders.tsx`, `components/OrderDetailModal.tsx` — formatDateTime
+
+### R-UX-03: ปุ่ม Interactive ต้องดูกดได้ชัดเจน
+- Element ที่กดได้ต้องมี visual cue ชัดเจน (border, background, shadow)
+- ปุ่ม "เพิ่มส่วนลด" ใน cart ต้องดูเหมือนปุ่ม ไม่ใช่แค่ text label
+- **ไฟล์**: `app/(pos)/cart.tsx` — discountRow style
+
+### R-UX-04: Error States ต้องแจ้ง user เสมอ ห้าม silent fail
+- ถ้าโหลดข้อมูลไม่ได้ ต้องแสดงข้อความแจ้ง ห้ามแสดงเป็น 0 หรือว่างเปล่าโดยไม่บอกสาเหตุ
+- **ไฟล์**: `app/(pos)/dashboard.tsx` — ถ้า fetch error ให้แสดง error state แทนค่า 0
+
+---
+
 ## แอพนี้คืออะไร
 
 EasyShop POS คือแอพ Point-of-Sale สำหรับร้านค้าไทย สร้างด้วย React Native + Expo รองรับทั้ง iOS และ Android รองรับการรับชำระเงินผ่าน PromptPay QR (มาตรฐาน EMV ของ BOT) โดยที่ QR สร้างในแอพฝั่ง client เลย ไม่ต้องผ่าน payment gateway ภายนอก ระบบรองรับหลายร้าน (multi-tenant) แต่ละร้านแยกข้อมูลกันด้วย Supabase RLS มี role สองแบบคือ owner (เจ้าของร้าน) กับ cashier (แคชเชียร์)
@@ -45,7 +68,7 @@ supabase functions deploy notify-payment
 psql $DATABASE_URL -f supabase/migrations/<filename>.sql
 ```
 
-> **หมายเหตุ**: push notification ใช้งานได้บนอุปกรณ์จริงเท่านั้น ไม่ทำงานใน simulator
+> **หมายเหตุ**: push notification ใช้งานได้บนอุปรณ์จริงเท่านั้น ไม่ทำงานใน simulator
 
 ---
 

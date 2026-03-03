@@ -168,7 +168,7 @@ export default function ProductsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="cube-outline" size={48} color={Colors.text.light} />
-            <Text style={styles.emptyText}>ไม่พบสินค้า / No products found</Text>
+            <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
           </View>
         }
       />

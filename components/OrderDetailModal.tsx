@@ -63,7 +63,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
 
   const formatDateTime = (str: string) => {
     const d = new Date(str);
-    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
+    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', calendar: 'gregory' })
       + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -81,7 +81,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
 
         {/* Header */}
         <View style={styles.sheetHeader}>
-          <View>
+          <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.orderTitle}>ออเดอร์ #{order.order_number}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
@@ -146,7 +146,7 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
               )}
               {order.payment?.confirmation_type === 'auto' && (
                 <View style={[styles.confirmBadge, { backgroundColor: Colors.primaryLight }]}>
-                  <Text style={[styles.confirmBadgeText, { color: Colors.secondary }]}>Auto</Text>
+                  <Text style={[styles.confirmBadgeText, { color: Colors.secondary }]}>อัตโนมัติ</Text>
                 </View>
               )}
             </View>
@@ -210,6 +210,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 10,
+    flexShrink: 0,
   },
   statusText: {
     fontSize: 13,

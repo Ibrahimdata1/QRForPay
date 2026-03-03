@@ -108,6 +108,7 @@ export const useProductStore = create<ProductState>()(
           price: productData.price,
           category_id: productData.category_id ?? null,
           stock: productData.stock ?? 0,
+          image_url: productData.image_url ?? null,
         }).eq('id', productData.id!)
         if (error) throw error
         set((state) => {
@@ -122,6 +123,7 @@ export const useProductStore = create<ProductState>()(
           category_id: productData.category_id ?? null,
           stock: productData.stock ?? 0,
           is_active: true,
+          image_url: productData.image_url ?? null,
         }).select().single()
         if (error) throw error
         set((state) => { state.products.push(data as Product) })
