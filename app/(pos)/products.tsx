@@ -19,6 +19,8 @@ import { ProductFormModal } from '../../components/ProductFormModal';
 
 export default function ProductsScreen() {
   const shop = useAuthStore((s) => s.shop);
+  const profile = useAuthStore((s) => s.profile);
+  const isOwner = profile?.role === 'owner';
   const products = useProductStore((s) => s.products);
   const categories = useProductStore((s) => s.categories);
   const fetchProducts = useProductStore((s) => s.fetchProducts);
@@ -102,26 +104,28 @@ export default function ProductsScreen() {
           <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
         </TouchableOpacity>
 
-        {/* Delete */}
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={() => {
-            Alert.alert(
-              'ลบสินค้า',
-              `ต้องการลบ "${item.name}" ออกจากระบบ?`,
-              [
-                { text: 'ยกเลิก', style: 'cancel' },
-                {
-                  text: 'ลบ',
-                  style: 'destructive',
-                  onPress: () => deleteProduct(item.id),
-                },
-              ]
-            );
-          }}
-        >
-          <Ionicons name="trash-outline" size={16} color="#EF4444" />
-        </TouchableOpacity>
+        {/* Delete — owner only */}
+        {isOwner && (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => {
+              Alert.alert(
+                'ลบสินค้า',
+                `ต้องการลบ "${item.name}" ออกจากระบบ?`,
+                [
+                  { text: 'ยกเลิก', style: 'cancel' },
+                  {
+                    text: 'ลบ',
+                    style: 'destructive',
+                    onPress: () => deleteProduct(item.id),
+                  },
+                ]
+              );
+            }}
+          >
+            <Ionicons name="trash-outline" size={16} color="#EF4444" />
+          </TouchableOpacity>
+        )}
       </View>
     );
   };

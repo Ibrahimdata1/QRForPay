@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Profile, Shop } from '../types'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 
 interface User {
   id: string
@@ -155,7 +156,11 @@ export const useAuthStore = create<AuthState>()(
 
         if (finalStatus !== 'granted') return
 
-        const tokenData = await Notifications.getExpoPushTokenAsync()
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId:
+            Constants.expoConfig?.extra?.eas?.projectId ??
+            Constants.easConfig?.projectId,
+        })
         const pushToken = tokenData.data
 
         await supabase

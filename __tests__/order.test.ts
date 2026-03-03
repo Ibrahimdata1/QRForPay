@@ -18,7 +18,8 @@ jest.mock('../src/lib/qr', () => ({
 }));
 
 import { useOrderStore } from '../src/store/orderStore';
-import { formatThaiCurrency, calculateChange } from '../src/lib/receipt';
+import { formatThaiCurrency, calculateChange, generateOrderNumber, formatReceipt } from '../src/lib/receipt';
+import { OrderWithItems } from '../src/types';
 
 function setupMockChain() {
   const eqChain: any = {
@@ -198,5 +199,203 @@ describe('Receipt', () => {
     // calculateChange uses Math.max(0, paid - total) so underpayment returns 0
     const result = calculateChange(99, 100);
     expect(result).toBe(0);
+  });
+
+  test('generateOrderNumber returns a string with date-seq format', () => {
+    const num = generateOrderNumber('shop-1');
+    // Format: YYYYMMDD-NNNN
+    expect(num).toMatch(/^\d{8}-\d{4}$/);
+  });
+
+  test('generateOrderNumber includes today\'s date prefix', () => {
+    const now = new Date();
+    const year = now.getFullYear().toString();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const expectedPrefix = `${year}${month}${day}`;
+
+    const num = generateOrderNumber('shop-1');
+    expect(num.startsWith(expectedPrefix)).toBe(true);
+  });
+
+  test('formatReceipt includes order number and total', () => {
+    const order: OrderWithItems = {
+      id: 'order-1',
+      shop_id: 'shop-1',
+      order_number: 1001,
+      cashier_id: 'cashier-1',
+      status: 'completed',
+      subtotal: 200,
+      discount_amount: 0,
+      tax_amount: 14,
+      total_amount: 200,
+      payment_method: 'cash',
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      items: [
+        {
+          id: 'item-1',
+          order_id: 'order-1',
+          product_id: 'prod-abc-123456789012',
+          quantity: 2,
+          unit_price: 100,
+          subtotal: 200,
+        },
+      ],
+    };
+
+    const receipt = formatReceipt(order);
+    expect(receipt).toContain('1001');
+    expect(receipt).toContain('CASH');
+    expect(receipt).toContain('฿200.00');
+    expect(receipt).toContain('EasyShop POS');
+    expect(receipt).toContain('Thank you');
+  });
+
+  test('formatReceipt shows discount line when discount_amount > 0', () => {
+    const order: OrderWithItems = {
+      id: 'order-2',
+      shop_id: 'shop-1',
+      order_number: 1002,
+      cashier_id: null,
+      status: 'completed',
+      subtotal: 400,
+      discount_amount: 40,
+      tax_amount: 25.2,
+      total_amount: 360,
+      payment_method: 'qr',
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      items: [
+        {
+          id: 'item-2',
+          order_id: 'order-2',
+          product_id: 'prod-1',
+          quantity: 4,
+          unit_price: 100,
+          subtotal: 400,
+        },
+      ],
+    };
+
+    const receipt = formatReceipt(order);
+    expect(receipt).toContain('Discount');
+    expect(receipt).toContain('฿40.00');
+  });
+
+  test('formatReceipt omits discount line when discount_amount is 0', () => {
+    const order: OrderWithItems = {
+      id: 'order-3',
+      shop_id: 'shop-1',
+      order_number: 1003,
+      cashier_id: null,
+      status: 'completed',
+      subtotal: 100,
+      discount_amount: 0,
+      tax_amount: 7,
+      total_amount: 100,
+      payment_method: 'cash',
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      items: [],
+    };
+
+    const receipt = formatReceipt(order);
+    expect(receipt).not.toContain('Discount');
+  });
+});
+
+describe('OrderStore — additional branches', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupMockChain();
+  });
+
+  test('updateOrderStatus to "completed" includes completed_at timestamp', async () => {
+    mockEq.mockResolvedValueOnce({ error: null });
+
+    const store = useOrderStore.getState();
+    await store.updateOrderStatus('order-1', 'completed');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        completed_at: expect.any(String),
+      })
+    );
+  });
+
+  test('updateOrderStatus non-completed: no completed_at field', async () => {
+    mockEq.mockResolvedValueOnce({ error: null });
+
+    const store = useOrderStore.getState();
+    await store.updateOrderStatus('order-1', 'confirmed');
+
+    const updateArg = mockUpdate.mock.calls[0][0];
+    expect(updateArg).not.toHaveProperty('completed_at');
+  });
+
+  test('updateOrderStatus: throws when DB returns error', async () => {
+    mockEq.mockResolvedValueOnce({ error: { message: 'update failed' } });
+
+    const store = useOrderStore.getState();
+    await expect(store.updateOrderStatus('order-1', 'confirmed')).rejects.toMatchObject({
+      message: 'update failed',
+    });
+  });
+
+  test('completeOrder with "auto" confirmationType passes it to payments update', async () => {
+    mockEq
+      .mockResolvedValueOnce({ error: null })  // payments update
+      .mockResolvedValueOnce({ error: null });  // orders update
+
+    const store = useOrderStore.getState();
+    await store.completeOrder('order-1', { status: 'success' }, 'auto');
+
+    const paymentUpdateArg = mockUpdate.mock.calls[0][0];
+    expect(paymentUpdateArg).toHaveProperty('confirmation_type', 'auto');
+    expect(paymentUpdateArg).toHaveProperty('confirmed_by', null);
+  });
+
+  test('completeOrder with "manual" and confirmedBy passes confirmedBy', async () => {
+    mockEq
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: null });
+
+    const store = useOrderStore.getState();
+    await store.completeOrder('order-1', { status: 'success' }, 'manual', 'cashier-1');
+
+    const paymentUpdateArg = mockUpdate.mock.calls[0][0];
+    expect(paymentUpdateArg).toHaveProperty('confirmation_type', 'manual');
+    expect(paymentUpdateArg).toHaveProperty('confirmed_by', 'cashier-1');
+  });
+
+  test('completeOrder: throws when payment update fails', async () => {
+    mockEq.mockResolvedValueOnce({ error: { message: 'payment update failed' } });
+
+    const store = useOrderStore.getState();
+    await expect(
+      store.completeOrder('order-1', { status: 'success' }, 'manual')
+    ).rejects.toMatchObject({ message: 'payment update failed' });
+  });
+
+  test('createOrder: throws when order insert fails', async () => {
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'order insert failed' } });
+    mockInsert.mockReturnValueOnce({ select: mockSelect });
+
+    const store = useOrderStore.getState();
+    await expect(
+      store.createOrder('shop-1', 'cashier-1', [], 'cash', 0, 0.07)
+    ).rejects.toMatchObject({ message: 'order insert failed' });
+  });
+
+  test('fetchOrders: handles error gracefully (sets isLoading false)', async () => {
+    mockLimit.mockResolvedValueOnce({ data: null, error: { message: 'fetch failed' } });
+
+    const store = useOrderStore.getState();
+    // Should not throw — error is swallowed
+    await store.fetchOrders('shop-1');
+
+    expect(useOrderStore.getState().isLoading).toBe(false);
   });
 });

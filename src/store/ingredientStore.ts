@@ -117,14 +117,26 @@ export const useIngredientStore = create<IngredientState>()(
       qty: number,
       type: 'stock_in' | 'adjustment' | 'waste',
       note?: string,
-      userId?: string
+      _userId?: string
     ) => {
       // For stock_in: positive delta. For waste/adjustment: caller passes signed qty.
       const delta = type === 'stock_in' ? Math.abs(qty) : qty
 
-      // Fetch current stock first, then apply delta (Supabase JS v2 doesn't support
-      // column arithmetic expressions in .update(), so we compute in application layer).
-      const { data: current, error: fetchError } = await supabase
+      // Use DB-side RPC to avoid read-then-write race condition.
+      // GREATEST(0, ...) and transaction log insertion are handled atomically in the DB.
+      const { error } = await supabase.rpc('adjust_stock', {
+        p_ingredient_id: ingredientId,
+        p_delta: delta,
+        p_type: type,
+        p_note: note ?? null,
+        p_reference_order_id: null,
+        p_shop_id: shopId,
+      })
+
+      if (error) throw error
+
+      // Refresh local state from DB to reflect the authoritative new stock value
+      const { data: updated, error: fetchError } = await supabase
         .from('ingredients')
         .select('current_stock')
         .eq('id', ingredientId)
@@ -132,34 +144,10 @@ export const useIngredientStore = create<IngredientState>()(
 
       if (fetchError) throw fetchError
 
-      const newStock = Math.max(0, Number(current.current_stock) + delta)
-
-      const { error: stockError } = await supabase
-        .from('ingredients')
-        .update({ current_stock: newStock, updated_at: new Date().toISOString() })
-        .eq('id', ingredientId)
-
-      if (stockError) throw stockError
-
-      // Insert transaction log
-      const { error: txError } = await supabase
-        .from('stock_transactions')
-        .insert({
-          shop_id: shopId,
-          ingredient_id: ingredientId,
-          transaction_type: type,
-          quantity: delta,
-          note: note ?? null,
-          created_by: userId ?? null,
-        })
-
-      if (txError) throw txError
-
-      // Update local state
       set((state) => {
         const ingredient = state.ingredients.find((i) => i.id === ingredientId)
         if (ingredient) {
-          ingredient.current_stock = newStock
+          ingredient.current_stock = Number(updated.current_stock)
         }
       })
     },
@@ -195,62 +183,37 @@ export const useIngredientStore = create<IngredientState>()(
       const ingredientIds = Object.keys(deltaMap)
       if (ingredientIds.length === 0) return
 
-      // Fetch current stock for all affected ingredients
-      const { data: currentStocks, error: fetchError } = await supabase
+      // Use DB-side RPC for each ingredient to avoid read-then-write race conditions.
+      // Each RPC call atomically applies the delta and inserts the transaction log.
+      await Promise.all(
+        ingredientIds.map((ingredientId) =>
+          supabase.rpc('adjust_stock', {
+            p_ingredient_id: ingredientId,
+            p_delta: -deltaMap[ingredientId],
+            p_type: 'auto_deduct',
+            p_note: 'ตัดสต็อกอัตโนมัติจากการขาย',
+            p_reference_order_id: orderId,
+            p_shop_id: shopId,
+          })
+        )
+      )
+
+      // Refresh local state for all affected ingredients
+      const { data: updatedStocks, error: fetchError } = await supabase
         .from('ingredients')
         .select('id, current_stock')
         .in('id', ingredientIds)
 
       if (fetchError) throw fetchError
 
-      // Prepare updates and transaction rows
-      const transactionRows: Array<{
-        shop_id: string
-        ingredient_id: string
-        transaction_type: string
-        quantity: number
-        reference_id: string
-        note: string
-      }> = []
-
-      for (const row of currentStocks ?? []) {
-        const delta = deltaMap[row.id]
-        if (!delta) continue
-
-        const newStock = Math.max(0, Number(row.current_stock) - delta)
-
-        const { error: updateError } = await supabase
-          .from('ingredients')
-          .update({ current_stock: newStock, updated_at: new Date().toISOString() })
-          .eq('id', row.id)
-
-        if (updateError) throw updateError
-
-        transactionRows.push({
-          shop_id: shopId,
-          ingredient_id: row.id,
-          transaction_type: 'auto_deduct',
-          quantity: -delta,
-          reference_id: orderId,
-          note: 'ตัดสต็อกอัตโนมัติจากการขาย',
-        })
-
-        // Update local state
-        set((state) => {
+      set((state) => {
+        for (const row of updatedStocks ?? []) {
           const ingredient = state.ingredients.find((i) => i.id === row.id)
           if (ingredient) {
-            ingredient.current_stock = newStock
+            ingredient.current_stock = Number(row.current_stock)
           }
-        })
-      }
-
-      if (transactionRows.length > 0) {
-        const { error: txError } = await supabase
-          .from('stock_transactions')
-          .insert(transactionRows)
-
-        if (txError) throw txError
-      }
+        }
+      })
     },
   }))
 )

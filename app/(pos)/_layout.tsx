@@ -56,6 +56,16 @@ export default function POSLayout() {
       }}
     >
       <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'แดชบอร์ด',
+          headerTitle: 'สรุปยอดขาย',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bar-chart-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: 'ขาย',
@@ -92,6 +102,16 @@ export default function POSLayout() {
           headerTitle: 'จัดการวัตถุดิบ',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="flask-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'ตั้งค่า',
+          headerTitle: 'ตั้งค่าร้าน',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />
