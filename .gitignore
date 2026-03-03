@@ -32,3 +32,4 @@ expo-env.d.ts
 
 # Supabase temp files
 supabase/.temp/
+coverage/
