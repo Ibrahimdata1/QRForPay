@@ -42,6 +42,7 @@ export function generatePromptPayPayload(
   promptPayId: string,
   amount: number
 ): string {
+  if (!promptPayId || !promptPayId.trim()) throw new Error('PromptPay ID is required')
   if (amount <= 0) throw new Error('Amount must be greater than 0')
   if (amount > 999999) throw new Error('Amount must not exceed 999,999')
 

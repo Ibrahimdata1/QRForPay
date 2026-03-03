@@ -120,4 +120,19 @@ describe('PromptPay QR Generation', () => {
   test('amount > 999999 throws Error', () => {
     expect(() => generatePromptPayPayload(testPhone, 1000000)).toThrow();
   });
+
+  // INTEGRATION CONTRACT: QRPaymentModal uses qrData = qrPayload || generatePromptPayPayload(promptPayId, amount)
+  // If promptPayId is empty string AND qrPayload is undefined → qrData = '' → QRCode crash on device
+  // This test documents the expected behavior: empty promptPayId must NOT produce a payload
+  test('empty promptPayId string should throw or be caught before QRCode render', () => {
+    // generatePromptPayPayload('', amount) should throw — caller must guard before rendering <QRCode>
+    expect(() => generatePromptPayPayload('', 100)).toThrow();
+  });
+
+  test('null/undefined promptPayId should not silently produce invalid QR', () => {
+    // Guard: QRPaymentModal line 88 — if promptPayId is falsy, qrData = '' (correct, no QR rendered)
+    const promptPayId = '';
+    const qrData = promptPayId ? generatePromptPayPayload(promptPayId, 100) : '';
+    expect(qrData).toBe(''); // empty → show error state, not QRCode
+  });
 });

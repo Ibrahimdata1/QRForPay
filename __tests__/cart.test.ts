@@ -78,6 +78,31 @@ describe('CartStore', () => {
     expect(useCartStore.getState().items).toHaveLength(0);
   });
 
+  // BOUNDARY: qty=1 is the last unit — decrement to 0 should auto-remove
+  // UI layer (cart.tsx) MUST show a confirmation Alert before calling updateQuantity(id, 0)
+  test('updateQuantity(id, 1) keeps item in cart at qty 1', () => {
+    const product = makeProduct({ stock: 5 });
+    const store = useCartStore.getState();
+
+    store.addItem(product);
+    store.addItem(product); // qty = 2
+    store.updateQuantity('prod-1', 1); // decrement to 1
+
+    const state = useCartStore.getState();
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0].quantity).toBe(1);
+  });
+
+  test('updateQuantity(id, -1) also removes item (negative qty)', () => {
+    const product = makeProduct({ stock: 5 });
+    const store = useCartStore.getState();
+
+    store.addItem(product);
+    store.updateQuantity('prod-1', -1);
+
+    expect(useCartStore.getState().items).toHaveLength(0);
+  });
+
   test('applyDiscount sets discount percentage', () => {
     const product = makeProduct({ price: 200 });
     const store = useCartStore.getState();
