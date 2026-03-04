@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
@@ -83,12 +83,68 @@ export default function OrdersScreen() {
     );
   };
 
+  const handleAddItemsToOrder = (order: OrderWithItems) => {
+    // Navigate to POS with resumeOrderId so the screen loads existing items
+    router.push({
+      pathname: '/(pos)',
+      params: { resumeOrderId: order.id },
+    });
+  };
+
+  const handlePayPendingOrder = (order: OrderWithItems) => {
+    // Resume order for payment: navigate to POS with resumeOrderId
+    // Cart will be loaded; user then goes to cart to pay
+    router.push({
+      pathname: '/(pos)',
+      params: { resumeOrderId: order.id },
+    });
+  };
+
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
     const date = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', calendar: 'gregory' });
     const time = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     return `${date}  ${time}`;
   };
+
+  // Pending orders sorted by created_at ascending (oldest first = longest waiting)
+  const pendingOrders = orders
+    .filter((o) => o.status === 'pending')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  const renderPendingCard = (order: OrderWithItems) => (
+    <TouchableOpacity
+      key={order.id}
+      style={styles.pendingCard}
+      activeOpacity={0.7}
+      onPress={() => setSelectedOrder(order)}
+    >
+      <View style={styles.pendingCardHeader}>
+        <View style={styles.pendingCardLeft}>
+          <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
+          {order.table_number ? (
+            <View style={styles.tableBadge}>
+              <Ionicons name="grid-outline" size={12} color="#0F766E" />
+              <Text style={styles.tableBadgeText}>โต๊ะ {order.table_number}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.pendingTime}>{formatDateTime(order.created_at)}</Text>
+      </View>
+      <View style={styles.pendingCardFooter}>
+        <Text style={styles.pendingTotal}>฿{(order.total_amount ?? 0).toFixed(0)}</Text>
+        <Text style={styles.pendingItemCount}>{order.items?.length ?? 0} รายการ</Text>
+        <TouchableOpacity
+          style={styles.addItemsButton}
+          onPress={() => handleAddItemsToOrder(order)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+          <Text style={styles.addItemsButtonText}>+ เพิ่มสินค้า</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
 
   const renderOrder = ({ item }: { item: OrderWithItems }) => {
     const accentColor = statusColors[item.status] || '#9CA3AF';
@@ -99,7 +155,14 @@ export default function OrdersScreen() {
 
         <View style={styles.cardBody}>
           <View style={styles.orderHeader}>
-            <Text style={styles.orderNumber}>#{item.order_number}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 }}>
+              <Text style={styles.orderNumber}>#{item.order_number}</Text>
+              {item.table_number ? (
+                <View style={styles.tableTagSmall}>
+                  <Text style={styles.tableTagText}>โต๊ะ {item.table_number}</Text>
+                </View>
+              ) : null}
+            </View>
             <View
               style={[
                 styles.statusBadge,
@@ -209,6 +272,22 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         ListHeaderComponent={
           <View>
+            {/* Pending / open tables section */}
+            {pendingOrders.length > 0 && (
+              <View style={styles.pendingSection}>
+                <View style={styles.pendingSectionHeader}>
+                  <View style={styles.pendingSectionTitleRow}>
+                    <View style={styles.openDot} />
+                    <Text style={styles.pendingSectionTitle}>โต๊ะเปิดอยู่</Text>
+                  </View>
+                  <Text style={styles.pendingSectionCount}>{pendingOrders.length} โต๊ะ</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
+                  {pendingOrders.map(renderPendingCard)}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Search */}
             <TextInput
               style={styles.searchInput}
@@ -250,6 +329,7 @@ export default function OrdersScreen() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         onCancel={handleCancelOrder}
+        onPayPending={handlePayPendingOrder}
       />
     </View>
   );
@@ -263,6 +343,125 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+  },
+  // Pending open tables section
+  pendingSection: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  pendingSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  pendingSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  openDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#F59E0B',
+  },
+  pendingSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  pendingSectionCount: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    fontWeight: '500',
+  },
+  pendingScroll: {
+    gap: 10,
+    paddingBottom: 4,
+  },
+  pendingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    width: 200,
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  pendingCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  pendingCardLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  pendingOrderNum: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  tableBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  tableBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F766E',
+  },
+  pendingTime: {
+    fontSize: 11,
+    color: Colors.text.light,
+    textAlign: 'right',
+    flexShrink: 0,
+    maxWidth: 80,
+  },
+  pendingCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: 10,
+  },
+  pendingTotal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
+    flex: 1,
+  },
+  pendingItemCount: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  addItemsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  addItemsButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
   },
   searchInput: {
     margin: 12,
@@ -337,8 +536,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text.primary,
-    flex: 1,
-    marginRight: 8,
+  },
+  tableTagSmall: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  tableTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0F766E',
   },
   statusBadge: {
     paddingHorizontal: 10,

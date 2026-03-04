@@ -162,4 +162,54 @@ describe('CartStore', () => {
     expect(state.items).toHaveLength(3);
     expect(selectSubtotal(state)).toBe(350);
   });
+
+  test('setResumeOrder sets resumeOrderId and loads items into cart', () => {
+    const store = useCartStore.getState();
+    const product = makeProduct({ id: 'resume-p1', price: 150 });
+    const cartItems = [{ product, quantity: 2, subtotal: 300 }];
+
+    store.setResumeOrder('order-abc', cartItems);
+
+    const state = useCartStore.getState();
+    expect(state.resumeOrderId).toBe('order-abc');
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0].product.id).toBe('resume-p1');
+    expect(state.items[0].quantity).toBe(2);
+  });
+
+  test('setResumeOrder resets discount to 0', () => {
+    const store = useCartStore.getState();
+
+    store.applyDiscount(20);
+    store.setResumeOrder('order-xyz', []);
+
+    const state = useCartStore.getState();
+    expect(state.discount).toBe(0);
+  });
+
+  test('clearResumeOrder resets resumeOrderId and empties cart', () => {
+    const store = useCartStore.getState();
+    const product = makeProduct({ id: 'p-clear', price: 100 });
+    store.setResumeOrder('order-123', [{ product, quantity: 1, subtotal: 100 }]);
+
+    store.clearResumeOrder();
+
+    const state = useCartStore.getState();
+    expect(state.resumeOrderId).toBeNull();
+    expect(state.items).toHaveLength(0);
+    expect(state.discount).toBe(0);
+  });
+
+  test('clearCart also clears resumeOrderId', () => {
+    const store = useCartStore.getState();
+    const product = makeProduct();
+
+    store.setResumeOrder('order-456', [{ product, quantity: 1, subtotal: 100 }]);
+    expect(useCartStore.getState().resumeOrderId).toBe('order-456');
+
+    store.clearCart();
+    const state = useCartStore.getState();
+    expect(state.resumeOrderId).toBeNull();
+    expect(state.items).toHaveLength(0);
+  });
 });

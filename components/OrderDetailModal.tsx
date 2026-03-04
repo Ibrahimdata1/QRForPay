@@ -33,9 +33,10 @@ interface OrderDetailModalProps {
   visible: boolean;
   onClose: () => void;
   onCancel?: (order: OrderWithItems) => void;
+  onPayPending?: (order: OrderWithItems) => void;
 }
 
-export function OrderDetailModal({ order, visible, onClose, onCancel }: OrderDetailModalProps) {
+export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
   const productMap = useMemo(
@@ -83,7 +84,15 @@ export function OrderDetailModal({ order, visible, onClose, onCancel }: OrderDet
         {/* Header */}
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1, marginRight: 12 }}>
-            <Text style={styles.orderTitle}>ออเดอร์ #{order.order_number}</Text>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.orderTitle}>ออเดอร์ #{order.order_number}</Text>
+              {order.table_number ? (
+                <View style={styles.tableChip}>
+                  <Ionicons name="grid-outline" size={12} color="#0F766E" />
+                  <Text style={styles.tableChipText}>โต๊ะ {order.table_number}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '1A' }]}>
@@ -203,7 +212,17 @@ export function OrderDetailModal({ order, visible, onClose, onCancel }: OrderDet
               activeOpacity={0.8}
             >
               <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
-              <Text style={styles.cancelBtnText}>ยกเลิกออเดอร์</Text>
+              <Text style={styles.cancelBtnText}>ยกเลิก</Text>
+            </TouchableOpacity>
+          )}
+          {order.status === 'pending' && onPayPending && (
+            <TouchableOpacity
+              style={styles.payPendingBtn}
+              onPress={() => { onClose(); onPayPending(order); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cash-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.payPendingBtnText}>ชำระเงิน</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
@@ -249,15 +268,35 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   orderTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.text.primary,
   },
+  tableChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  tableChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F766E',
+  },
   orderDate: {
     fontSize: 13,
     color: Colors.text.secondary,
-    marginTop: 2,
+    marginTop: 4,
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -384,6 +423,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#EF4444',
+  },
+  payPendingBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: Colors.success,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  payPendingBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   closeBtn: {
     flex: 1,

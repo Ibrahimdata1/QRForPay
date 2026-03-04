@@ -9,12 +9,15 @@ interface CartState {
   items: CartItem[]
   discount: number
   taxRate: number
+  resumeOrderId: string | null
 
   addItem: (product: Product) => void
   removeItem: (productId: string) => void
   updateQuantity: (productId: string, qty: number) => void
   applyDiscount: (percent: number) => void
   clearCart: () => void
+  setResumeOrder: (orderId: string, items: CartItem[]) => void
+  clearResumeOrder: () => void
 }
 
 export const useCartStore = create<CartState>()(
@@ -23,6 +26,7 @@ export const useCartStore = create<CartState>()(
       items: [],
       discount: 0,
       taxRate: Config.tax.rate,
+      resumeOrderId: null,
 
       addItem: (product: Product) => {
         if (product.stock <= 0) {
@@ -76,6 +80,21 @@ export const useCartStore = create<CartState>()(
 
       clearCart: () =>
         set((state) => {
+          state.items = []
+          state.discount = 0
+          state.resumeOrderId = null
+        }),
+
+      setResumeOrder: (orderId: string, items: CartItem[]) =>
+        set((state) => {
+          state.resumeOrderId = orderId
+          state.items = items
+          state.discount = 0
+        }),
+
+      clearResumeOrder: () =>
+        set((state) => {
+          state.resumeOrderId = null
           state.items = []
           state.discount = 0
         }),

@@ -30,15 +30,18 @@ export default function CartScreen() {
   const items = useCartStore((s) => s.items);
   const discount = useCartStore((s) => s.discount);
   const taxRate = useCartStore((s) => s.taxRate);
+  const resumeOrderId = useCartStore((s) => s.resumeOrderId);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clearCart);
+  const clearResumeOrder = useCartStore((s) => s.clearResumeOrder);
 
   const subtotal = useCartStore(selectSubtotal);
   const taxAmount = useCartStore(selectTaxAmount);
   const total = useCartStore(selectGrandTotal);
 
   const createOrder = useOrderStore((s) => s.createOrder);
+  const addItemsToOrder = useOrderStore((s) => s.addItemsToOrder);
   const completeOrder = useOrderStore((s) => s.completeOrder);
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
@@ -50,6 +53,9 @@ export default function CartScreen() {
   const discountAmount = useCartStore(selectDiscountAmount);
   const applyDiscount = useCartStore((s) => s.applyDiscount);
 
+  // Table number
+  const [tableNumber, setTableNumber] = useState('');
+
   // Payment method selector
   const [paymentMethod, setPaymentMethod] = useState<'qr' | 'cash'>('qr');
 
@@ -57,7 +63,6 @@ export default function CartScreen() {
   const [cashReceived, setCashReceived] = useState('');
 
   // Compute effective discount amount for display when discountType is 'baht'
-  // The cart store always stores discount as a percentage; for baht mode we compute locally.
   const discountBahtValue = discountType === 'baht'
     ? Math.min(parseFloat(discountInput || '0') || 0, subtotal)
     : discountAmount;
@@ -78,7 +83,6 @@ export default function CartScreen() {
         applyDiscount(val);
       }
     } else {
-      // Baht mode: store as percentage equivalent so cart store is consistent
       if (!isNaN(val) && val >= 0) {
         const cappedBaht = Math.min(val, subtotal);
         const pct = subtotal > 0 ? (cappedBaht / subtotal) * 100 : 0;
@@ -89,10 +93,52 @@ export default function CartScreen() {
     setDiscountInput('');
   };
 
-  const getDiscountLabel = () => {
-    if (discount <= 0) return 'เพิ่มส่วนลด';
-    const amt = discountAmount;
-    return `ส่วนลด -฿${amt.toFixed(0)}`;
+  // Save as pending order (table management: no payment yet)
+  const handleSaveOrder = () => {
+    if (items.length === 0) {
+      Alert.alert('ตะกร้าว่าง', 'กรุณาเพิ่มสินค้าก่อนบันทึกออเดอร์');
+      return;
+    }
+    if (!shop?.id || !profile?.id) return;
+
+    const tableLabel = tableNumber.trim() ? `โต๊ะ ${tableNumber.trim()}` : 'ไม่ระบุโต๊ะ';
+    Alert.alert(
+      'บันทึกออเดอร์',
+      `บันทึกเป็น pending (${tableLabel})\nลูกค้าจะชำระเงินทีหลัง`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'บันทึก',
+          onPress: async () => {
+            setIsCreatingOrder(true);
+            try {
+              if (resumeOrderId) {
+                // Resume mode: add new items to existing order
+                await addItemsToOrder(resumeOrderId, items, discount, taxRate);
+                clearResumeOrder();
+              } else {
+                // New order, status stays pending (no payment yet)
+                await createOrder(
+                  shop.id,
+                  profile.id,
+                  items,
+                  'qr', // default method; actual payment collected later
+                  discount,
+                  taxRate,
+                  tableNumber.trim() || null
+                );
+                clearCart();
+              }
+              router.replace('/(pos)/orders');
+            } catch (err: any) {
+              Alert.alert('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถบันทึกออเดอร์ได้');
+            } finally {
+              setIsCreatingOrder(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handlePayment = () => {
@@ -118,17 +164,25 @@ export default function CartScreen() {
             if (!shop?.id || !profile?.id) return;
             setIsCreatingOrder(true);
             try {
-              const order = await createOrder(
-                shop.id,
-                profile.id,
-                items,
-                'qr',
-                discount,
-                taxRate
-              );
-              // clearCart ควรย้ายไปใน qr-payment screen หลัง payment success
-              // เพื่อป้องกันตะกร้าหายก่อนที่ผู้ใช้จะชำระเงินจริง
-              router.push({ pathname: '/qr-payment', params: { orderId: order.id } });
+              let orderId: string;
+              if (resumeOrderId) {
+                // Resume mode: finalise existing order
+                await addItemsToOrder(resumeOrderId, items, discount, taxRate);
+                orderId = resumeOrderId;
+                clearResumeOrder();
+              } else {
+                const order = await createOrder(
+                  shop.id,
+                  profile.id,
+                  items,
+                  'qr',
+                  discount,
+                  taxRate,
+                  tableNumber.trim() || null
+                );
+                orderId = order.id;
+              }
+              router.push({ pathname: '/qr-payment', params: { orderId } });
             } catch (err: any) {
               Alert.alert(
                 'เกิดข้อผิดพลาด',
@@ -169,16 +223,25 @@ export default function CartScreen() {
         onPress: async () => {
           setIsCreatingOrder(true);
           try {
-            const order = await createOrder(
-              shop.id,
-              profile.id,
-              items,
-              'cash',
-              discount,
-              taxRate
-            );
+            let orderId: string;
+            if (resumeOrderId) {
+              await addItemsToOrder(resumeOrderId, items, discount, taxRate);
+              orderId = resumeOrderId;
+              clearResumeOrder();
+            } else {
+              const order = await createOrder(
+                shop.id,
+                profile.id,
+                items,
+                'cash',
+                discount,
+                taxRate,
+                tableNumber.trim() || null
+              );
+              orderId = order.id;
+            }
             // Cash is accepted in person — complete immediately
-            await completeOrder(order.id, {
+            await completeOrder(orderId, {
               cash_received: cashReceivedNum || null,
               cash_change: cashReceivedNum > 0 ? cashReceivedNum - currentTotal : null,
             }, 'manual', profile.id);
@@ -218,6 +281,31 @@ export default function CartScreen() {
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>กำลังสร้างออเดอร์...</Text>
+        </View>
+      )}
+
+      {/* Resume order banner */}
+      {resumeOrderId ? (
+        <View style={styles.resumeBanner}>
+          <Ionicons name="refresh-circle-outline" size={16} color="#0F766E" />
+          <Text style={styles.resumeBannerText}>เพิ่มสินค้าในออเดอร์เดิม</Text>
+        </View>
+      ) : null}
+
+      {/* Table number input */}
+      {!resumeOrderId && (
+        <View style={styles.tableRow}>
+          <Ionicons name="grid-outline" size={18} color={Colors.text.secondary} />
+          <TextInput
+            style={styles.tableInput}
+            placeholder="หมายเลขโต๊ะ (ไม่บังคับ)"
+            placeholderTextColor={Colors.text.light}
+            value={tableNumber}
+            onChangeText={setTableNumber}
+            keyboardType="default"
+            returnKeyType="done"
+            maxLength={10}
+          />
         </View>
       )}
 
@@ -378,21 +466,38 @@ export default function CartScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.payButton, (items.length === 0 || isCreatingOrder) && styles.payButtonDisabled]}
-          onPress={handlePayment}
-          disabled={items.length === 0 || isCreatingOrder}
-          activeOpacity={0.85}
-        >
-          <Ionicons
-            name={paymentMethod === 'qr' ? 'qr-code' : 'cash'}
-            size={24}
-            color={Colors.surface}
-          />
-          <Text style={styles.payButtonText}>
-            {`ชำระเงิน ฿${effectiveTotal.toFixed(0)}`}
-          </Text>
-        </TouchableOpacity>
+        {/* Action buttons */}
+        <View style={styles.actionRow}>
+          {/* Save Order (pending) button */}
+          <TouchableOpacity
+            style={[styles.saveOrderButton, (items.length === 0 || isCreatingOrder) && styles.actionButtonDisabled]}
+            onPress={handleSaveOrder}
+            disabled={items.length === 0 || isCreatingOrder}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="save-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.saveOrderButtonText}>
+              {resumeOrderId ? 'บันทึกเพิ่ม' : 'บันทึกออเดอร์'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Pay button */}
+          <TouchableOpacity
+            style={[styles.payButton, (items.length === 0 || isCreatingOrder) && styles.actionButtonDisabled]}
+            onPress={handlePayment}
+            disabled={items.length === 0 || isCreatingOrder}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={paymentMethod === 'qr' ? 'qr-code' : 'cash'}
+              size={20}
+              color="#FFFFFF"
+            />
+            <Text style={styles.payButtonText}>
+              {`ชำระ ฿${effectiveTotal.toFixed(0)}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Discount modal */}
@@ -517,6 +622,38 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: Colors.text.secondary,
+  },
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#A7F3D0',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  resumeBannerText: {
+    fontSize: 13,
+    color: '#0F766E',
+    fontWeight: '600',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tableInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text.primary,
+    height: 36,
   },
   topBar: {
     flexDirection: 'row',
@@ -661,27 +798,48 @@ const styles = StyleSheet.create({
     color: Colors.success,
     marginTop: 2,
   },
+  // Action buttons row
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  saveOrderButton: {
+    flex: 1,
+    backgroundColor: Colors.success,
+    borderRadius: 14,
+    height: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  saveOrderButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   payButton: {
+    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 14,
     height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
+    gap: 6,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 5,
   },
-  payButtonDisabled: {
+  actionButtonDisabled: {
     opacity: 0.5,
   },
   payButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
   },
   discountRow: {
@@ -722,7 +880,6 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     marginBottom: 14,
   },
-  // Discount type toggle pills
   discountTypeRow: {
     flexDirection: 'row',
     gap: 8,

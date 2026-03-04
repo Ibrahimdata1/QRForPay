@@ -52,6 +52,7 @@ export interface Order {
   tax_amount: number | null
   discount_amount: number
   payment_method: 'cash' | 'qr' | 'card' | null
+  table_number: string | null
   created_at: string
   completed_at: string | null
   cancelled_at: string | null

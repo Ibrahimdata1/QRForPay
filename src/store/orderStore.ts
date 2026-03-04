@@ -17,8 +17,16 @@ interface OrderState {
     items: CartItem[],
     paymentMethod: 'cash' | 'qr' | 'card',
     discount: number,
-    taxRate: number
+    taxRate: number,
+    tableNumber?: string | null
   ) => Promise<Order>
+  addItemsToOrder: (
+    orderId: string,
+    items: CartItem[],
+    discount: number,
+    taxRate: number
+  ) => Promise<void>
+  fetchPendingOrders: (shopId: string) => Promise<OrderWithItems[]>
   updateOrderStatus: (orderId: string, status: string) => Promise<void>
   completeOrder: (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => Promise<void>
   cancelOrder: (orderId: string, cancelledBy: string, reason?: string) => Promise<void>
@@ -39,7 +47,8 @@ export const useOrderStore = create<OrderState>()(
       items: CartItem[],
       paymentMethod: 'cash' | 'qr' | 'card',
       discount: number = 0,
-      taxRate: number = Config.tax.rate
+      taxRate: number = Config.tax.rate,
+      tableNumber: string | null = null
     ): Promise<Order> => {
       set((state) => {
         state.isLoading = true
@@ -65,6 +74,7 @@ export const useOrderStore = create<OrderState>()(
             total_amount: totalAmount,
             payment_method: paymentMethod,
             status: 'pending',
+            table_number: tableNumber ?? null,
           })
           .select()
           .single()
@@ -134,6 +144,98 @@ export const useOrderStore = create<OrderState>()(
         })
         throw err
       }
+    },
+
+    addItemsToOrder: async (
+      orderId: string,
+      items: CartItem[],
+      discount: number = 0,
+      taxRate: number = Config.tax.rate
+    ): Promise<void> => {
+      set((state) => {
+        state.isLoading = true
+      })
+
+      try {
+        const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
+        const discountAmount = subtotal * (discount / 100)
+        const afterDiscount = subtotal - discountAmount
+        const taxAmount = afterDiscount * (taxRate / (1 + taxRate))
+        const totalAmount = afterDiscount
+
+        // Insert new order items
+        if (items.length > 0) {
+          const orderItems = items.map((item) => ({
+            order_id: orderId,
+            product_id: item.product.id,
+            quantity: item.quantity,
+            unit_price: item.product.price,
+            subtotal: item.subtotal,
+          }))
+
+          const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItems)
+
+          if (itemsError) throw itemsError
+        }
+
+        // Update order totals
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({
+            subtotal,
+            discount_amount: discountAmount,
+            tax_amount: taxAmount,
+            total_amount: totalAmount,
+          })
+          .eq('id', orderId)
+
+        if (orderError) throw orderError
+
+        // Update payment amount
+        await supabase
+          .from('payments')
+          .update({ amount: totalAmount })
+          .eq('order_id', orderId)
+          .eq('status', 'pending')
+
+        set((state) => {
+          state.isLoading = false
+          // Update local state if this order is in the list
+          const order = state.orders.find((o) => o.id === orderId)
+          if (order) {
+            order.subtotal = subtotal
+            order.discount_amount = discountAmount
+            order.tax_amount = taxAmount
+            order.total_amount = totalAmount
+          }
+        })
+      } catch (err: any) {
+        set((state) => {
+          state.isLoading = false
+        })
+        throw err
+      }
+    },
+
+    fetchPendingOrders: async (shopId: string): Promise<OrderWithItems[]> => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, items:order_items(*), payment:payments(*)')
+        .eq('shop_id', shopId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      return (data || []).map((o: any) => {
+        const rawPayment = Array.isArray(o.payment) ? o.payment[0] : o.payment
+        const payment = rawPayment
+          ? { ...rawPayment, confirmed_by_profile: undefined }
+          : undefined
+        return { ...o, payment } as OrderWithItems
+      })
     },
 
     updateOrderStatus: async (orderId: string, status: string) => {

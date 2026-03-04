@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { ProductCard } from '../../components/ProductCard';
@@ -19,6 +19,8 @@ import { CategoryFilter } from '../../components/CategoryFilter';
 import { useCartStore, selectItemCount } from '../../src/store/cartStore';
 import { useProductStore, selectFilteredProducts } from '../../src/store/productStore';
 import { useAuthStore } from '../../src/store/authStore';
+import { useOrderStore } from '../../src/store/orderStore';
+import { CartItem } from '../../src/types';
 
 const { width } = Dimensions.get('window');
 const NUM_COLUMNS = width > 600 ? 3 : 2;
@@ -35,9 +37,17 @@ export default function POSScreen() {
   const setCategory = useProductStore((s) => s.setCategory);
   const isLoading = useProductStore((s) => s.isLoading);
   const filteredProducts = useProductStore(useShallow(selectFilteredProducts));
+  const products = useProductStore((s) => s.products);
 
   const addItem = useCartStore((s) => s.addItem);
+  const setResumeOrder = useCartStore((s) => s.setResumeOrder);
+  const resumeOrderId = useCartStore((s) => s.resumeOrderId);
   const cartCount = useCartStore(selectItemCount);
+
+  const fetchPendingOrders = useOrderStore((s) => s.fetchPendingOrders);
+
+  // Resume order param from navigation
+  const { resumeOrderId: paramResumeOrderId } = useLocalSearchParams<{ resumeOrderId?: string }>();
 
   // Toast state
   const [toastProduct, setToastProduct] = useState<string | null>(null);
@@ -70,6 +80,35 @@ export default function POSScreen() {
     }
   }, [shop?.id]);
 
+  // Handle resume order: load existing order items into cart
+  useEffect(() => {
+    if (!paramResumeOrderId || !shop?.id) return;
+    // Only load if we haven't already loaded this resume order
+    if (resumeOrderId === paramResumeOrderId) return;
+
+    fetchPendingOrders(shop.id).then((pendingOrders) => {
+      const order = pendingOrders.find((o) => o.id === paramResumeOrderId);
+      if (!order) return;
+
+      // Build CartItem array from order items using product store
+      const cartItems: CartItem[] = order.items
+        .map((item) => {
+          const product = products.find((p) => p.id === item.product_id);
+          if (!product) return null;
+          return {
+            product,
+            quantity: item.quantity,
+            subtotal: item.subtotal,
+          };
+        })
+        .filter((i): i is CartItem => i !== null);
+
+      setResumeOrder(paramResumeOrderId, cartItems);
+    }).catch(() => {
+      // Non-critical: if loading fails just start fresh
+    });
+  }, [paramResumeOrderId, shop?.id, products]);
+
   const categoryOptions = useMemo(() => {
     const all = { id: 'all', label: 'ทั้งหมด' };
     return [all, ...categories.map((c) => ({ id: c.id, label: c.name }))];
@@ -89,6 +128,14 @@ export default function POSScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Resume order banner */}
+      {resumeOrderId ? (
+        <View style={styles.resumeBanner}>
+          <Ionicons name="refresh-circle-outline" size={16} color="#0F766E" />
+          <Text style={styles.resumeBannerText}>เพิ่มสินค้าในออเดอร์เดิม — เลือกสินค้าแล้วไปหน้าตะกร้า</Text>
+        </View>
+      ) : null}
+
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={Colors.text.light} style={styles.searchIcon} />
         <TextInput
@@ -157,7 +204,7 @@ export default function POSScreen() {
 
       {toastProduct !== null && (
         <Animated.View style={[styles.toast, { opacity: toastOpacity }]} pointerEvents="none">
-          <Text style={styles.toastText}>✓ เพิ่ม {toastProduct} แล้ว</Text>
+          <Text style={styles.toastText}>+ เพิ่ม {toastProduct} แล้ว</Text>
         </Animated.View>
       )}
     </View>
@@ -168,6 +215,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#A7F3D0',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  resumeBannerText: {
+    fontSize: 13,
+    color: '#0F766E',
+    fontWeight: '600',
+    flex: 1,
   },
   searchContainer: {
     flexDirection: 'row',

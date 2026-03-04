@@ -399,3 +399,146 @@ describe('OrderStore — additional branches', () => {
     expect(useOrderStore.getState().isLoading).toBe(false);
   });
 });
+
+describe('OrderStore — table management', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupMockChain();
+  });
+
+  test('createOrder with table_number includes table_number in insert payload', async () => {
+    const mockOrderData = {
+      id: 'order-table-1',
+      shop_id: 'shop-1',
+      subtotal: 200,
+      discount_amount: 0,
+      tax_amount: 14,
+      total_amount: 200,
+      payment_method: 'cash',
+      status: 'pending',
+      table_number: '5',
+      created_at: new Date().toISOString(),
+    };
+
+    mockSingle
+      .mockResolvedValueOnce({ data: mockOrderData, error: null })
+      .mockResolvedValueOnce({ data: { id: 'pay-1' }, error: null });
+    mockInsert
+      .mockReturnValueOnce({ select: mockSelect })
+      .mockResolvedValueOnce({ error: null })
+      .mockReturnValueOnce({ select: mockSelect });
+
+    const store = useOrderStore.getState();
+    const mockItems = [{ product: { id: 'p1', price: 100 }, quantity: 2, subtotal: 200 }] as any;
+
+    await store.createOrder('shop-1', 'cashier-1', mockItems, 'cash', 0, 0.07, '5');
+
+    const insertArg = mockInsert.mock.calls[0][0];
+    expect(insertArg).toHaveProperty('table_number', '5');
+  });
+
+  test('createOrder without table_number passes null', async () => {
+    const mockOrderData = {
+      id: 'order-no-table',
+      shop_id: 'shop-1',
+      subtotal: 100,
+      discount_amount: 0,
+      tax_amount: 7,
+      total_amount: 100,
+      payment_method: 'cash',
+      status: 'pending',
+      table_number: null,
+      created_at: new Date().toISOString(),
+    };
+
+    mockSingle
+      .mockResolvedValueOnce({ data: mockOrderData, error: null })
+      .mockResolvedValueOnce({ data: { id: 'pay-2' }, error: null });
+    mockInsert
+      .mockReturnValueOnce({ select: mockSelect })
+      .mockResolvedValueOnce({ error: null })
+      .mockReturnValueOnce({ select: mockSelect });
+
+    const store = useOrderStore.getState();
+
+    await store.createOrder('shop-1', 'cashier-1', [], 'cash', 0, 0.07);
+
+    const insertArg = mockInsert.mock.calls[0][0];
+    expect(insertArg).toHaveProperty('table_number', null);
+  });
+
+  test('addItemsToOrder inserts new order_items and updates order totals', async () => {
+    // addItemsToOrder: insert order_items, update orders, update payments
+    // mockInsert returns { select: mockSelect } by default (non-Promise), awaiting it yields that object.
+    // mockUpdate returns eqChain (non-Promise); the chained .eq().eq() also return eqChain.
+    // awaiting eqChain gives eqChain itself — error field is undefined (falsy) so no throw.
+
+    const store = useOrderStore.getState();
+    const mockItems = [{ product: { id: 'p1', price: 50 }, quantity: 1, subtotal: 50 }] as any;
+
+    await store.addItemsToOrder('order-1', mockItems, 0, 0.07);
+
+    expect(mockFrom).toHaveBeenCalledWith('order_items');
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ order_id: 'order-1', product_id: 'p1', quantity: 1 }),
+      ])
+    );
+    expect(mockFrom).toHaveBeenCalledWith('orders');
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ total_amount: expect.any(Number) })
+    );
+  });
+
+  test('addItemsToOrder with empty items still updates order totals', async () => {
+    // No insert for items when empty; orders update and payments update still happen.
+    const store = useOrderStore.getState();
+
+    await store.addItemsToOrder('order-1', [], 0, 0.07);
+
+    // order_items insert should not be called (items is empty)
+    // orders update should still be called
+    expect(mockFrom).toHaveBeenCalledWith('orders');
+  });
+
+  test('addItemsToOrder: throws when order_items insert fails', async () => {
+    // Make the insert return a Promise that resolves to { error: ... }
+    // so that `await supabase.from('order_items').insert(...)` gets the error.
+    mockInsert.mockReturnValueOnce(Promise.resolve({ error: { message: 'items insert failed' } }));
+
+    const store = useOrderStore.getState();
+    const mockItems = [{ product: { id: 'p1', price: 50 }, quantity: 1, subtotal: 50 }] as any;
+
+    await expect(
+      store.addItemsToOrder('order-1', mockItems, 0, 0.07)
+    ).rejects.toMatchObject({ message: 'items insert failed' });
+  });
+
+  test('fetchPendingOrders returns only pending orders sorted ascending', async () => {
+    const mockPending = [
+      { id: 'o1', status: 'pending', created_at: '2026-03-04T08:00:00Z', items: [], payment: null },
+      { id: 'o2', status: 'pending', created_at: '2026-03-04T09:00:00Z', items: [], payment: null },
+    ];
+
+    // fetchPendingOrders uses: .select().eq(shop_id).eq(status).order().  The chain resolves at order()
+    mockOrderBy.mockResolvedValueOnce({ data: mockPending, error: null });
+
+    const store = useOrderStore.getState();
+    const result = await store.fetchPendingOrders('shop-1');
+
+    expect(mockFrom).toHaveBeenCalledWith('orders');
+    expect(mockEq).toHaveBeenCalledWith('status', 'pending');
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('o1');
+  });
+
+  test('fetchPendingOrders: throws when DB returns error', async () => {
+    mockOrderBy.mockResolvedValueOnce({ data: null, error: { message: 'fetch pending failed' } });
+
+    const store = useOrderStore.getState();
+
+    await expect(store.fetchPendingOrders('shop-1')).rejects.toMatchObject({
+      message: 'fetch pending failed',
+    });
+  });
+});

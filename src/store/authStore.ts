@@ -143,7 +143,8 @@ export const useAuthStore = create<AuthState>()(
     },
 
     signOut: async () => {
-      // Clear cart before signing out so it never leaks to the next session/shop
+      // Clear cart and resume order before signing out so nothing leaks to the next session/shop
+      useCartStore.getState().clearResumeOrder()
       useCartStore.getState().clearCart()
 
       await supabase.auth.signOut()

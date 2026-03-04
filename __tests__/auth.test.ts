@@ -29,7 +29,7 @@ jest.mock('react-native', () => ({
 
 // Mock cartStore so we can assert clearCart() calls without AsyncStorage.
 // Variable name must start with 'mock' for jest hoisting to allow the reference.
-const mockCartStore = { clearCart: jest.fn() };
+const mockCartStore = { clearCart: jest.fn(), clearResumeOrder: jest.fn() };
 jest.mock('../src/store/cartStore', () => ({
   useCartStore: {
     getState: () => mockCartStore,
