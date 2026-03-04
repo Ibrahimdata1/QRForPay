@@ -307,7 +307,7 @@ describe('E2E Payment Flow', () => {
           completed_at: null,
           items: [],
           payment: mockPaymentResponse as any,
-        },
+        } as any,
       });
 
       useOrderStore.getState().subscribeToOrder('order-rt-1');
@@ -346,7 +346,7 @@ describe('E2E Payment Flow', () => {
           completed_at: null,
           items: [],
           payment: mockPaymentResponse as any,
-        },
+        } as any,
       });
 
       useOrderStore.getState().subscribeToOrder('order-rt-2');

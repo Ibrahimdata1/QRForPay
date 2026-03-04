@@ -50,14 +50,7 @@ interface CartEntry {
 
 type ScreenState = 'loading' | 'error' | 'menu' | 'cart' | 'confirm' | 'paying' | 'status';
 
-type OrderStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'preparing'
-  | 'ready'
-  | 'delivered'
-  | 'completed'
-  | 'cancelled';
+type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -66,32 +59,23 @@ function formatPrice(n: number): string {
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: 'รอร้านยืนยัน',
-  confirmed: 'ร้านยืนยันแล้ว',
+  pending: 'รอร้านรับออเดอร์',
   preparing: 'กำลังทำอาหาร',
-  ready: 'พร้อมเสิร์ฟ',
-  delivered: 'ส่งแล้ว',
-  completed: 'เสร็จสิ้น',
+  completed: 'เสร็จแล้ว พร้อมเสิร์ฟ',
   cancelled: 'ยกเลิกแล้ว',
 };
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
   pending: '#F59E0B',
-  confirmed: '#0891B2',
   preparing: '#8B5CF6',
-  ready: '#059669',
-  delivered: '#0F766E',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
 
 const STATUS_ICON: Record<OrderStatus, string> = {
   pending: '⏳',
-  confirmed: '✅',
   preparing: '👨‍🍳',
-  ready: '🔔',
-  delivered: '🍽️',
-  completed: '⭐',
+  completed: '✅',
   cancelled: '❌',
 };
 
@@ -348,12 +332,7 @@ export default function CustomerOrderScreen() {
           const newStatus = payload.new?.status as OrderStatus;
           if (newStatus) {
             setOrderStatus(newStatus);
-            if (
-              newStatus === 'preparing' ||
-              newStatus === 'ready' ||
-              newStatus === 'delivered' ||
-              newStatus === 'completed'
-            ) {
+            if (newStatus === 'preparing' || newStatus === 'completed') {
               setScreen('status');
             }
           }
@@ -815,16 +794,10 @@ export default function CustomerOrderScreen() {
     const statusColor = STATUS_COLOR[orderStatus] ?? Colors.primary;
     const statusLabel = STATUS_LABEL[orderStatus] ?? orderStatus;
     const statusIcon = STATUS_ICON[orderStatus] ?? '📋';
-    const isDone =
-      orderStatus === 'delivered' || orderStatus === 'completed';
+    const isDone = orderStatus === 'completed';
     const isCancelled = orderStatus === 'cancelled';
 
-    const steps: OrderStatus[] = [
-      'pending',
-      'preparing',
-      'ready',
-      'delivered',
-    ];
+    const steps: OrderStatus[] = ['pending', 'preparing', 'completed'];
     const stepIndex = steps.indexOf(orderStatus);
 
     return (

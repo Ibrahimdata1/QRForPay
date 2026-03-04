@@ -46,7 +46,7 @@ export interface Order {
   shop_id: string
   order_number: number
   cashier_id: string | null
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled'
+  status: 'pending' | 'preparing' | 'completed' | 'cancelled'
   total_amount: number | null
   subtotal: number | null
   tax_amount: number | null

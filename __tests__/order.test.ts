@@ -219,7 +219,7 @@ describe('Receipt', () => {
   });
 
   test('formatReceipt includes order number and total', () => {
-    const order: OrderWithItems = {
+    const order = {
       id: 'order-1',
       shop_id: 'shop-1',
       order_number: 1001,
@@ -244,7 +244,7 @@ describe('Receipt', () => {
       ],
     };
 
-    const receipt = formatReceipt(order);
+    const receipt = formatReceipt(order as any);
     expect(receipt).toContain('1001');
     expect(receipt).toContain('CASH');
     expect(receipt).toContain('฿200.00');
@@ -253,7 +253,7 @@ describe('Receipt', () => {
   });
 
   test('formatReceipt shows discount line when discount_amount > 0', () => {
-    const order: OrderWithItems = {
+    const order = {
       id: 'order-2',
       shop_id: 'shop-1',
       order_number: 1002,
@@ -278,13 +278,13 @@ describe('Receipt', () => {
       ],
     };
 
-    const receipt = formatReceipt(order);
+    const receipt = formatReceipt(order as any);
     expect(receipt).toContain('Discount');
     expect(receipt).toContain('฿40.00');
   });
 
   test('formatReceipt omits discount line when discount_amount is 0', () => {
-    const order: OrderWithItems = {
+    const order = {
       id: 'order-3',
       shop_id: 'shop-1',
       order_number: 1003,
@@ -300,7 +300,7 @@ describe('Receipt', () => {
       items: [],
     };
 
-    const receipt = formatReceipt(order);
+    const receipt = formatReceipt(order as any);
     expect(receipt).not.toContain('Discount');
   });
 });

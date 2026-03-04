@@ -20,21 +20,15 @@ import { Colors } from '../../constants/colors';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
-  confirmed: '#0891B2',
   preparing: '#8B5CF6',
-  ready: '#059669',
-  delivered: '#0F766E',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
 
 const statusLabels: Record<string, string> = {
-  pending: 'รอดำเนินการ',
-  confirmed: 'ยืนยันแล้ว',
+  pending: 'รอ',
   preparing: 'กำลังทำ',
-  ready: 'พร้อมเสิร์ฟ',
-  delivered: 'ส่งแล้ว',
-  completed: 'สำเร็จ',
+  completed: 'เสร็จแล้ว',
   cancelled: 'ยกเลิก',
 };
 
@@ -55,7 +49,7 @@ export default function OrdersScreen() {
   const fetchError = useOrderStore((s) => s.fetchError);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'completed' | 'cancelled'>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -90,26 +84,12 @@ export default function OrdersScreen() {
     );
   };
 
-  const handleKitchenAction = (order: OrderWithItems, nextStatus: string, label: string) => {
-    Alert.alert(
-      `${label} #${order.order_number}`,
-      `ยืนยันเปลี่ยนสถานะเป็น "${statusLabels[nextStatus]}"?`,
-      [
-        { text: 'ยกเลิก', style: 'cancel' },
-        {
-          text: 'ยืนยัน',
-          onPress: () => {
-            updateOrderStatus(order.id, nextStatus)
-              .then(() => {
-                if (shop?.id) fetchOrders(shop.id);
-              })
-              .catch((err: any) => {
-                Alert.alert('เกิดข้อผิดพลาด', err.message || 'เปลี่ยนสถานะไม่สำเร็จ');
-              });
-          },
-        },
-      ]
-    );
+  const handleKitchenAction = (order: OrderWithItems, nextStatus: string) => {
+    updateOrderStatus(order.id, nextStatus)
+      .then(() => { if (shop?.id) fetchOrders(shop.id); })
+      .catch((err: any) => {
+        Alert.alert('เกิดข้อผิดพลาด', err.message || 'เปลี่ยนสถานะไม่สำเร็จ');
+      });
   };
 
   const handleAddItemsToOrder = (order: OrderWithItems) => {
@@ -138,7 +118,7 @@ export default function OrdersScreen() {
 
   // Active (non-completed/cancelled) orders sorted oldest-first
   const activeOrders = orders
-    .filter((o) => !['completed', 'cancelled'].includes(o.status))
+    .filter((o) => o.status === 'pending' || o.status === 'preparing')
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   // Keep pendingOrders for the horizontal scroll section (legacy naming used below)
@@ -147,13 +127,9 @@ export default function OrdersScreen() {
   const getKitchenAction = (order: OrderWithItems): { nextStatus: string; label: string; color: string } | null => {
     switch (order.status) {
       case 'pending':
-        return { nextStatus: 'preparing', label: 'กำลังทำ', color: '#8B5CF6' };
-      case 'confirmed':
-        return { nextStatus: 'preparing', label: 'กำลังทำ', color: '#8B5CF6' };
+        return { nextStatus: 'preparing', label: 'รับออเดอร์', color: '#8B5CF6' };
       case 'preparing':
-        return { nextStatus: 'ready', label: 'พร้อมเสิร์ฟ', color: '#059669' };
-      case 'ready':
-        return { nextStatus: 'delivered', label: 'ส่งแล้ว', color: '#0F766E' };
+        return { nextStatus: 'completed', label: 'เสร็จแล้ว', color: '#10B981' };
       default:
         return null;
     }
@@ -200,7 +176,7 @@ export default function OrdersScreen() {
           {action ? (
             <TouchableOpacity
               style={[styles.kitchenActionButton, { backgroundColor: action.color }]}
-              onPress={() => handleKitchenAction(order, action.nextStatus, action.label)}
+              onPress={() => handleKitchenAction(order, action.nextStatus)}
               activeOpacity={0.8}
             >
               <Text style={styles.kitchenActionText}>{action.label}</Text>
@@ -314,7 +290,7 @@ export default function OrdersScreen() {
           {action ? (
             <TouchableOpacity
               style={[styles.kitchenActionButton, { backgroundColor: action.color, marginBottom: 10 }]}
-              onPress={() => handleKitchenAction(item, action.nextStatus, action.label)}
+              onPress={() => handleKitchenAction(item, action.nextStatus)}
               activeOpacity={0.8}
             >
               <Text style={styles.kitchenActionText}>{action.label}</Text>
@@ -391,7 +367,7 @@ export default function OrdersScreen() {
             {/* Status filter pills */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}>
-              {(['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'completed', 'cancelled'] as const).map(s => (
+              {(['all', 'pending', 'preparing', 'completed', 'cancelled'] as const).map(s => (
                 <TouchableOpacity key={s}
                   style={[styles.filterPill,
                     statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}

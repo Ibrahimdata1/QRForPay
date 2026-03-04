@@ -240,15 +240,11 @@ export const useOrderStore = create<OrderState>()(
 
     updateOrderStatus: async (orderId: string, status: string) => {
       const now = new Date().toISOString()
+      // Only send status + completed_at (existing column); skip preparing_at/ready_at/delivered_at
+      // until PostgREST schema cache is reloaded after migration
       const updateData: any = { status }
       if (status === 'completed') {
         updateData.completed_at = now
-      } else if (status === 'preparing') {
-        updateData.preparing_at = now
-      } else if (status === 'ready') {
-        updateData.ready_at = now
-      } else if (status === 'delivered') {
-        updateData.delivered_at = now
       }
       const { error } = await supabase
         .from('orders')

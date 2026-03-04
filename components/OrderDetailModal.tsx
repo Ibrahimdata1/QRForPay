@@ -12,14 +12,14 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
-  confirmed: '#0F766E',
-  completed: '#059669',
+  preparing: '#8B5CF6',
+  completed: '#10B981',
   cancelled: '#EF4444',
 };
 const statusLabels: Record<string, string> = {
-  pending: 'รอดำเนินการ',
-  confirmed: 'ยืนยันแล้ว',
-  completed: 'สำเร็จ',
+  pending: 'รอ',
+  preparing: 'กำลังทำ',
+  completed: 'เสร็จแล้ว',
   cancelled: 'ยกเลิก',
 };
 const methodLabels: Record<string, string> = {
@@ -205,7 +205,7 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
 
         {/* Buttons */}
         <View style={styles.btnRow}>
-          {(order.status === 'pending' || order.status === 'confirmed') && onCancel && (
+          {order.status === 'pending' && onCancel && (
             <TouchableOpacity
               style={styles.cancelBtn}
               onPress={() => onCancel(order)}
