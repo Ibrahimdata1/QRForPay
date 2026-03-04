@@ -50,7 +50,7 @@ interface CartEntry {
 
 type ScreenState = 'loading' | 'error' | 'menu' | 'cart' | 'confirm' | 'paying' | 'status';
 
-type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,15 +59,17 @@ function formatPrice(n: number): string {
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: 'รอร้านรับออเดอร์',
+  pending: 'รอดำเนินการ',
   preparing: 'กำลังทำอาหาร',
-  completed: 'เสร็จแล้ว พร้อมเสิร์ฟ',
+  ready: 'พร้อมเสิร์ฟแล้ว!',
+  completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิกแล้ว',
 };
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
   pending: '#F59E0B',
   preparing: '#8B5CF6',
+  ready: '#059669',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
@@ -75,6 +77,7 @@ const STATUS_COLOR: Record<OrderStatus, string> = {
 const STATUS_ICON: Record<OrderStatus, string> = {
   pending: '⏳',
   preparing: '👨‍🍳',
+  ready: '🔔',
   completed: '✅',
   cancelled: '❌',
 };
@@ -332,7 +335,7 @@ export default function CustomerOrderScreen() {
           const newStatus = payload.new?.status as OrderStatus;
           if (newStatus) {
             setOrderStatus(newStatus);
-            if (newStatus === 'preparing' || newStatus === 'completed') {
+            if (newStatus === 'preparing' || newStatus === 'ready' || newStatus === 'completed') {
               setScreen('status');
             }
           }
@@ -797,7 +800,7 @@ export default function CustomerOrderScreen() {
     const isDone = orderStatus === 'completed';
     const isCancelled = orderStatus === 'cancelled';
 
-    const steps: OrderStatus[] = ['pending', 'preparing', 'completed'];
+    const steps: OrderStatus[] = ['pending', 'preparing', 'ready', 'completed'];
     const stepIndex = steps.indexOf(orderStatus);
 
     return (

@@ -13,13 +13,15 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
   preparing: '#8B5CF6',
+  ready: '#059669',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
 const statusLabels: Record<string, string> = {
-  pending: 'รอ',
+  pending: 'รอดำเนินการ',
   preparing: 'กำลังทำ',
-  completed: 'เสร็จแล้ว',
+  ready: 'พร้อมเสิร์ฟ',
+  completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิก',
 };
 const methodLabels: Record<string, string> = {

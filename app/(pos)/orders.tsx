@@ -21,14 +21,16 @@ import { Colors } from '../../constants/colors';
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
   preparing: '#8B5CF6',
+  ready: '#059669',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
 
 const statusLabels: Record<string, string> = {
-  pending: 'รอ',
+  pending: 'รอดำเนินการ',
   preparing: 'กำลังทำ',
-  completed: 'เสร็จแล้ว',
+  ready: 'พร้อมเสิร์ฟ',
+  completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิก',
 };
 
@@ -49,7 +51,7 @@ export default function OrdersScreen() {
   const fetchError = useOrderStore((s) => s.fetchError);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'completed' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -118,7 +120,7 @@ export default function OrdersScreen() {
 
   // Active (non-completed/cancelled) orders sorted oldest-first
   const activeOrders = orders
-    .filter((o) => o.status === 'pending' || o.status === 'preparing')
+    .filter((o) => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready')
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   // Keep pendingOrders for the horizontal scroll section (legacy naming used below)
@@ -129,7 +131,7 @@ export default function OrdersScreen() {
       case 'pending':
         return { nextStatus: 'preparing', label: 'รับออเดอร์', color: '#8B5CF6' };
       case 'preparing':
-        return { nextStatus: 'completed', label: 'เสร็จแล้ว', color: '#10B981' };
+        return { nextStatus: 'ready', label: 'พร้อมเสิร์ฟ', color: '#059669' };
       default:
         return null;
     }
@@ -367,7 +369,7 @@ export default function OrdersScreen() {
             {/* Status filter pills */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}>
-              {(['all', 'pending', 'preparing', 'completed', 'cancelled'] as const).map(s => (
+              {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(s => (
                 <TouchableOpacity key={s}
                   style={[styles.filterPill,
                     statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
