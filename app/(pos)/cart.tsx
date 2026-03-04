@@ -178,7 +178,10 @@ export default function CartScreen() {
               taxRate
             );
             // Cash is accepted in person — complete immediately
-            await completeOrder(order.id, {}, 'manual', profile.id);
+            await completeOrder(order.id, {
+              cash_received: cashReceivedNum || null,
+              cash_change: cashReceivedNum > 0 ? cashReceivedNum - currentTotal : null,
+            }, 'manual', profile.id);
             clearCart();
             setCashReceived('');
             if (cashReceivedNum > currentTotal) {

@@ -59,7 +59,7 @@ export default function LoginScreen() {
             <View style={[styles.posSquare, styles.posSquareAccent]} />
           </View>
         </View>
-        <Text style={styles.brandName}>EasyShop</Text>
+        <Text style={styles.brandName}>QRForPay</Text>
         <Text style={styles.brandTagline}>ระบบขายหน้าร้าน</Text>
       </View>
 

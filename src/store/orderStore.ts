@@ -21,6 +21,7 @@ interface OrderState {
   ) => Promise<Order>
   updateOrderStatus: (orderId: string, status: string) => Promise<void>
   completeOrder: (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => Promise<void>
+  cancelOrder: (orderId: string, cancelledBy: string, reason?: string) => Promise<void>
   fetchOrders: (shopId: string, limit?: number) => Promise<void>
   subscribeToOrder: (orderId: string) => () => void
 }
@@ -189,6 +190,42 @@ export const useOrderStore = create<OrderState>()(
       })
     },
 
+    cancelOrder: async (orderId: string, cancelledBy: string, reason?: string) => {
+      const now = new Date().toISOString()
+
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancelled_at: now,
+          cancelled_by: cancelledBy,
+          cancel_reason: reason ?? null,
+        })
+        .eq('id', orderId)
+
+      if (orderError) throw orderError
+
+      // Mark payment as failed if it exists and is still pending
+      await supabase
+        .from('payments')
+        .update({ status: 'failed' })
+        .eq('order_id', orderId)
+        .eq('status', 'pending')
+
+      set((state) => {
+        const order = state.orders.find((o) => o.id === orderId)
+        if (order) {
+          order.status = 'cancelled'
+          order.cancelled_at = now
+          order.cancelled_by = cancelledBy
+          order.cancel_reason = reason ?? null
+        }
+        if (state.currentOrder?.id === orderId) {
+          state.currentOrder.status = 'cancelled'
+        }
+      })
+    },
+
     fetchOrders: async (shopId: string, limit: number = 50) => {
       set((state) => {
         state.isLoading = true
@@ -198,7 +235,7 @@ export const useOrderStore = create<OrderState>()(
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('*, items:order_items(*), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name))')
+          .select('*, items:order_items(*), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)')
           .eq('shop_id', shopId)
           .order('created_at', { ascending: false })
           .limit(limit)
@@ -213,10 +250,13 @@ export const useOrderStore = create<OrderState>()(
             const payment = rawPayment
               ? { ...rawPayment, confirmed_by_profile: undefined }
               : undefined
+            const cancelledByProfile = o.cancelled_by_profile ?? undefined
             return {
               ...o,
               payment,
               confirmedByProfile,
+              cancelledByProfile,
+              cancelled_by_profile: undefined,
             }
           }) as OrderWithItems[]
           state.isLoading = false

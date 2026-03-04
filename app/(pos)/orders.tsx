@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -39,8 +40,10 @@ const methodLabels: Record<string, string> = {
 
 export default function OrdersScreen() {
   const shop = useAuthStore((s) => s.shop);
+  const profile = useAuthStore((s) => s.profile);
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  const cancelOrder = useOrderStore((s) => s.cancelOrder);
   const isLoading = useOrderStore((s) => s.isLoading);
   const fetchError = useOrderStore((s) => s.fetchError);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
@@ -54,6 +57,31 @@ export default function OrdersScreen() {
       }
     }, [shop?.id])
   );
+
+  const handleCancelOrder = (order: OrderWithItems) => {
+    Alert.alert(
+      'ยกเลิกออเดอร์ #' + order.order_number,
+      'ต้องการยกเลิกออเดอร์นี้? ออเดอร์จะยังอยู่ในระบบแต่แสดงเป็นยกเลิก',
+      [
+        { text: 'ไม่ยกเลิก', style: 'cancel' },
+        {
+          text: 'ยืนยันยกเลิก',
+          style: 'destructive',
+          onPress: () => {
+            if (!profile?.id) return;
+            cancelOrder(order.id, profile.id)
+              .then(() => {
+                setSelectedOrder(null);
+                if (shop?.id) fetchOrders(shop.id);
+              })
+              .catch((err: any) => {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยกเลิกออเดอร์ไม่สำเร็จ');
+              });
+          },
+        },
+      ]
+    );
+  };
 
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -108,7 +136,16 @@ export default function OrdersScreen() {
             ) : null}
           </View>
 
-          {item.payment?.confirmation_type ? (
+          {item.status === 'cancelled' && item.cancelledByProfile?.full_name ? (
+            <View style={styles.confirmationRow}>
+              <View style={[styles.confirmBadge, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="close-circle-outline" size={11} color="#EF4444" />
+                <Text style={[styles.confirmBadgeText, { color: '#EF4444' }]}>
+                  ยกเลิกโดย {item.cancelledByProfile.full_name}
+                </Text>
+              </View>
+            </View>
+          ) : item.payment?.confirmation_type ? (
             <View style={styles.confirmationRow}>
               {item.payment.confirmation_type === 'manual' ? (
                 <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
@@ -212,6 +249,7 @@ export default function OrdersScreen() {
         visible={selectedOrder !== null}
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
+        onCancel={handleCancelOrder}
       />
     </View>
   );

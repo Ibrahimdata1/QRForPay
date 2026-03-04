@@ -32,9 +32,10 @@ interface OrderDetailModalProps {
   order: OrderWithItems | null;
   visible: boolean;
   onClose: () => void;
+  onCancel?: (order: OrderWithItems) => void;
 }
 
-export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalProps) {
+export function OrderDetailModal({ order, visible, onClose, onCancel }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
   const productMap = useMemo(
@@ -151,12 +152,64 @@ export function OrderDetailModal({ order, visible, onClose }: OrderDetailModalPr
               )}
             </View>
           )}
+
+          {/* Cash received / change */}
+          {order.payment?.method === 'cash' && order.payment?.cash_received != null && (
+            <View style={styles.cashInfoBox}>
+              <View style={styles.cashInfoRow}>
+                <Text style={styles.cashInfoLabel}>รับเงินมา</Text>
+                <Text style={styles.cashInfoValue}>฿{order.payment.cash_received.toFixed(0)}</Text>
+              </View>
+              {order.payment.cash_change != null && (
+                <View style={styles.cashInfoRow}>
+                  <Text style={styles.cashInfoLabel}>ทอนเงิน</Text>
+                  <Text style={[styles.cashInfoValue, { color: Colors.success }]}>
+                    ฿{order.payment.cash_change.toFixed(0)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Cancelled info */}
+          {order.status === 'cancelled' && (
+            <View style={styles.cancelInfoBox}>
+              <Ionicons name="close-circle-outline" size={16} color="#EF4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cancelInfoTitle}>
+                  ยกเลิกเมื่อ {order.cancelled_at ? formatDateTime(order.cancelled_at) : '—'}
+                </Text>
+                {order.cancelledByProfile?.full_name && (
+                  <Text style={styles.cancelInfoSub}>
+                    โดย: {order.cancelledByProfile.full_name}
+                  </Text>
+                )}
+                {order.cancel_reason && (
+                  <Text style={styles.cancelInfoSub}>เหตุผล: {order.cancel_reason}</Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          <View style={{ height: 16 }} />
         </ScrollView>
 
-        {/* Close */}
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-          <Text style={styles.closeBtnText}>ปิด</Text>
-        </TouchableOpacity>
+        {/* Buttons */}
+        <View style={styles.btnRow}>
+          {(order.status === 'pending' || order.status === 'confirmed') && onCancel && (
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => onCancel(order)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+              <Text style={styles.cancelBtnText}>ยกเลิกออเดอร์</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={styles.closeBtnText}>ปิด</Text>
+          </TouchableOpacity>
+        </View>
       </Animated.View>
     </Modal>
   );
@@ -310,9 +363,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#D97706',
   },
-  closeBtn: {
+  btnRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginHorizontal: 20,
-    marginTop: 16,
+    marginTop: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  closeBtn: {
+    flex: 1,
     height: 50,
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -323,5 +397,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  cashInfoBox: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+    gap: 4,
+  },
+  cashInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cashInfoLabel: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  cashInfoValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  cancelInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+  },
+  cancelInfoTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  cancelInfoSub: {
+    fontSize: 12,
+    color: '#B91C1C',
+    marginTop: 2,
   },
 });

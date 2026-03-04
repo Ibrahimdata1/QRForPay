@@ -54,6 +54,9 @@ export interface Order {
   payment_method: 'cash' | 'qr' | 'card' | null
   created_at: string
   completed_at: string | null
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancel_reason: string | null
 }
 
 export interface OrderItem {
@@ -75,6 +78,8 @@ export interface Payment {
   transaction_ref: string | null
   confirmation_type: 'manual' | 'auto' | null
   confirmed_by: string | null
+  cash_received: number | null
+  cash_change: number | null
   created_at: string
   updated_at: string
 }
@@ -83,6 +88,7 @@ export interface OrderWithItems extends Order {
   items: OrderItem[]
   payment?: Payment
   confirmedByProfile?: { full_name: string }
+  cancelledByProfile?: { full_name: string }
 }
 
 export interface CartItem {
