@@ -5,6 +5,7 @@ import { Profile, Shop } from '../types'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
+import { useCartStore } from './cartStore'
 
 interface User {
   id: string
@@ -115,6 +116,15 @@ export const useAuthStore = create<AuthState>()(
           shop = shopData
         }
 
+        // Guard: if the incoming shop differs from what was previously loaded
+        // (e.g. a different account signed in without a proper sign-out), clear
+        // any stale cart data before populating the new session.
+        const previousShopId = get().shop?.id
+        const incomingShopId = (shop as Shop | null)?.id ?? profile?.shop_id ?? null
+        if (previousShopId && incomingShopId && previousShopId !== incomingShopId) {
+          useCartStore.getState().clearCart()
+        }
+
         set((state) => {
           state.user = user
           state.profile = profile as Profile
@@ -133,6 +143,9 @@ export const useAuthStore = create<AuthState>()(
     },
 
     signOut: async () => {
+      // Clear cart before signing out so it never leaks to the next session/shop
+      useCartStore.getState().clearCart()
+
       await supabase.auth.signOut()
       set((state) => {
         state.user = null

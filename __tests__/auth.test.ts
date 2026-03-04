@@ -27,6 +27,15 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
+// Mock cartStore so we can assert clearCart() calls without AsyncStorage.
+// Variable name must start with 'mock' for jest hoisting to allow the reference.
+const mockCartStore = { clearCart: jest.fn() };
+jest.mock('../src/store/cartStore', () => ({
+  useCartStore: {
+    getState: () => mockCartStore,
+  },
+}));
+
 // ─── mock fn declarations ─────────────────────────────────────────────────────
 
 const mockGetPermissionsAsync = jest.fn();
@@ -291,6 +300,145 @@ describe('AuthStore — signOut', () => {
     mockSignOut.mockResolvedValueOnce({});
     await useAuthStore.getState().signOut();
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── cart isolation (regression: cross-shop cart leak) ───────────────────────
+//
+// Scenario: user logs into shop-A, adds items, logs out, logs into shop-B.
+// The cart must be empty when the new session starts.
+// Two enforcement layers:
+//   1. signOut() always clears the cart.
+//   2. signIn() clears the cart when the incoming shop_id differs from the
+//      previously-loaded shop_id (defense-in-depth for forced re-auth without
+//      an explicit sign-out).
+
+describe('AuthStore — cart isolation on signOut', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupFromChain();
+    mockCartStore.clearCart.mockClear();
+    mockSignOut.mockResolvedValue({});
+  });
+
+  test('signOut clears cart before supabase.auth.signOut', async () => {
+    useAuthStore.setState({
+      user: { id: 'user-1', email: 'a@a.com' },
+      profile: makeProfile({ shop_id: 'shop-1' }),
+      shop: makeShop({ id: 'shop-1' }),
+      isLoading: false,
+      isInitialized: true,
+    });
+
+    const callOrder: string[] = [];
+    mockCartStore.clearCart.mockImplementation(() => callOrder.push('clearCart'));
+    mockSignOut.mockImplementation(async () => { callOrder.push('supabaseSignOut'); });
+
+    await useAuthStore.getState().signOut();
+
+    expect(mockCartStore.clearCart).toHaveBeenCalledTimes(1);
+    expect(callOrder[0]).toBe('clearCart');
+    expect(callOrder[1]).toBe('supabaseSignOut');
+  });
+
+  test('signOut leaves auth state null after clearing cart', async () => {
+    useAuthStore.setState({
+      user: { id: 'user-1', email: 'a@a.com' },
+      profile: makeProfile(),
+      shop: makeShop(),
+      isLoading: false,
+      isInitialized: true,
+    });
+
+    await useAuthStore.getState().signOut();
+
+    const state = useAuthStore.getState();
+    expect(state.user).toBeNull();
+    expect(state.profile).toBeNull();
+    expect(state.shop).toBeNull();
+    expect(mockCartStore.clearCart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AuthStore — cart isolation on signIn (cross-shop guard)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupFromChain();
+    mockCartStore.clearCart.mockClear();
+    mockGetPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockGetExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[zzz]' });
+  });
+
+  test('signIn with same shop_id does NOT clear cart', async () => {
+    // Pre-load state for shop-1
+    useAuthStore.setState({
+      user: { id: 'user-1', email: 'a@a.com' },
+      profile: makeProfile({ shop_id: 'shop-1' }),
+      shop: makeShop({ id: 'shop-1' }),
+      isLoading: false,
+      isInitialized: true,
+    });
+
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'a@a.com' } },
+      error: null,
+    });
+    // Profile and shop for same shop-1
+    mockSingle
+      .mockResolvedValueOnce({ data: makeProfile({ shop_id: 'shop-1' }), error: null })
+      .mockResolvedValueOnce({ data: makeShop({ id: 'shop-1' }), error: null });
+
+    await useAuthStore.getState().signIn('a@a.com', 'pass');
+
+    expect(mockCartStore.clearCart).not.toHaveBeenCalled();
+  });
+
+  test('signIn with different shop_id clears cart (cross-shop guard)', async () => {
+    // Pre-load state for shop-1
+    useAuthStore.setState({
+      user: { id: 'user-1', email: 'a@a.com' },
+      profile: makeProfile({ shop_id: 'shop-1' }),
+      shop: makeShop({ id: 'shop-1' }),
+      isLoading: false,
+      isInitialized: true,
+    });
+
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: { id: 'user-2', email: 'b@b.com' } },
+      error: null,
+    });
+    // Profile and shop for shop-2 (different shop)
+    mockSingle
+      .mockResolvedValueOnce({ data: makeProfile({ id: 'user-2', email: 'b@b.com', shop_id: 'shop-2' }), error: null })
+      .mockResolvedValueOnce({ data: makeShop({ id: 'shop-2', name: 'Shop B' }), error: null });
+
+    await useAuthStore.getState().signIn('b@b.com', 'pass');
+
+    expect(mockCartStore.clearCart).toHaveBeenCalledTimes(1);
+  });
+
+  test('signIn with no prior shop in state does NOT clear cart', async () => {
+    // Fresh state — no previous shop
+    useAuthStore.setState({
+      user: null,
+      profile: null,
+      shop: null,
+      isLoading: false,
+      isInitialized: false,
+    });
+
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'a@a.com' } },
+      error: null,
+    });
+    mockSingle
+      .mockResolvedValueOnce({ data: makeProfile({ shop_id: 'shop-1' }), error: null })
+      .mockResolvedValueOnce({ data: makeShop({ id: 'shop-1' }), error: null });
+
+    await useAuthStore.getState().signIn('a@a.com', 'pass');
+
+    // No prior shop → no stale cart → clearCart must NOT be called
+    expect(mockCartStore.clearCart).not.toHaveBeenCalled();
   });
 });
 
