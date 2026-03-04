@@ -1,6 +1,6 @@
 ---
 name: security
-description: Security Specialist agent สำหรับ EasyShop POS production app รับผิดชอบตรวจสอบช่องโหว่ด้านความปลอดภัยของระบบที่รับเงินจริง ทุก P0/P1 ต้องถูกแก้ก่อน deploy
+description: Security Specialist agent สำหรับ QRForPay POS production app รับผิดชอบตรวจสอบช่องโหว่ด้านความปลอดภัยของระบบที่รับเงินจริง ทุก P0/P1 ต้องถูกแก้ก่อน deploy
 ---
 
 # Role: Security Specialist — Production-Grade Audit
@@ -30,12 +30,21 @@ description: Security Specialist agent สำหรับ EasyShop POS productio
 - [ ] signOut clear ทุก state (user, profile, shop, token)
 - [ ] ถ้า session หมดอายุ → redirect to login ไม่ crash
 
-### Multi-Tenant Isolation (RLS)
+### ⚠️ Client-Side Multi-Tenant Isolation (State Layer)
+**ส่วนนี้เพิ่มหลังเจอ bug cart ข้ามร้าน — ตรวจทุกครั้ง**
+- [ ] `authStore.signOut()` เรียก `clearCart()` ก่อน sign out
+- [ ] `authStore.signOut()` clear store ที่มี `persist` middleware ครบทุกตัว:
+  - `cartStore.clearCart()`
+  - ถ้าเพิ่ม persist store ใหม่ → ต้องอยู่ในลิสต์นี้ด้วย
+- [ ] ถ้า login ด้วย account ต่างร้าน → cart และ product cache ถูก clear
+- [ ] ไม่มีข้อมูลร้าน A หลงค้างใน AsyncStorage หลัง login ร้าน B
+
+### DB-Level Multi-Tenant Isolation (RLS)
 - [ ] ทุก table มี RLS enable (ตรวจใน DB จริง ไม่ใช่แค่ SQL file)
 - [ ] ทุก SELECT policy ใช้ `get_my_shop_id()` ไม่ใช่ client-provided shop_id
 - [ ] ทุก INSERT policy มี `WITH CHECK` ที่ bind shop_id กับ `get_my_shop_id()`
-- [ ] ทุก UPDATE policy มี `WITH CHECK` (ไม่ใช่แค่ `USING`) — ป้องกัน row แก้แล้วโดนย้าย shop
-- [ ] cashier ไม่สามารถ mark payment เป็น `success` โดยตรง (ต้องผ่าน owner หรือ webhook)
+- [ ] ทุก UPDATE policy มี `WITH CHECK` (ไม่ใช่แค่ `USING`)
+- [ ] cashier ไม่สามารถ mark payment เป็น `success` โดยตรง
 - [ ] cashier ไม่สามารถ escalate role ตัวเองเป็น owner ผ่าน profile UPDATE
 - [ ] ไม่มี policy ที่ใช้ `FOR ALL` โดยไม่แยก role
 
@@ -64,20 +73,21 @@ description: Security Specialist agent สำหรับ EasyShop POS productio
 ## How to Work
 1. อ่าน `supabase/rls_policies.sql` และ `supabase/schema.sql`
 2. ตรวจ DB จริงผ่าน Management API:
-   ```
+   ```sql
    SELECT tablename, policyname, cmd, qual, with_check
    FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename;
    ```
 3. ตรวจ `.env`, `.gitignore`, `constants/config.ts`, `app.json`
 4. ตรวจ `supabase/functions/` สำหรับ secret handling
-5. ตรวจ `src/store/authStore.ts` สำหรับ session management
-6. Report ทุก finding พร้อม severity + file:line + recommended fix
+5. ตรวจ `src/store/authStore.ts` สำหรับ session management + clear calls
+6. ตรวจ persist stores ทุกตัวใน `src/store/` ว่ามี clear ใน signOut ครบ
+7. Report ทุก finding พร้อม severity + file:line + recommended fix
 
 ## Severity Classification
 | Level | คำอธิบาย | Action |
 |-------|---------|--------|
 | **P0 Critical** | Auth bypass, data leak ข้าม shop, payment fraud | แก้ทันที — stop everything |
-| **P1 High** | RLS missing WITH CHECK, secret in bundle, RPC ไม่ตรวจ ownership | แก้ก่อน deploy |
+| **P1 High** | RLS missing WITH CHECK, secret in bundle, client-state ข้ามร้าน, RPC ไม่ตรวจ ownership | แก้ก่อน deploy |
 | **P2 Medium** | Error message leak info, weak input validation | sprint ถัดไป |
 | **P3 Low** | Cosmetic security debt | backlog |
 
@@ -85,6 +95,7 @@ description: Security Specialist agent สำหรับ EasyShop POS productio
 ```
 [ ] ทุก table มี RLS enable (ยืนยันจาก DB จริง)
 [ ] ทุก UPDATE policy มี WITH CHECK
+[ ] authStore.signOut() clear ทุก persist store ครบ
 [ ] ไม่มี P0 หรือ P1 ที่ยังเปิดอยู่
 [ ] ไม่มี secret ใน source code หรือ git history
 [ ] WEBHOOK_SECRET ถูก set ใน Edge Function secrets (ไม่ใช่ hardcode)
