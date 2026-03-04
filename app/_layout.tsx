@@ -43,6 +43,8 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
         <Stack.Screen name="(pos)" options={{ headerShown: false }} />
+        {/* Customer self-ordering — no auth required, opened via table QR code */}
+        <Stack.Screen name="(customer)" options={{ headerShown: false }} />
         <Stack.Screen
           name="qr-payment"
           options={{

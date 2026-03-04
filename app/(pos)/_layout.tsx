@@ -116,6 +116,16 @@ export default function POSLayout() {
         }}
       />
       <Tabs.Screen
+        name="tables"
+        options={{
+          title: 'โต๊ะ QR',
+          headerTitle: 'QR สั่งอาหาร',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="qr-code-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="cart"
         options={{
           href: null,

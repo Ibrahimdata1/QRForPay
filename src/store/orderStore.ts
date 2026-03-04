@@ -239,9 +239,16 @@ export const useOrderStore = create<OrderState>()(
     },
 
     updateOrderStatus: async (orderId: string, status: string) => {
+      const now = new Date().toISOString()
       const updateData: any = { status }
       if (status === 'completed') {
-        updateData.completed_at = new Date().toISOString()
+        updateData.completed_at = now
+      } else if (status === 'preparing') {
+        updateData.preparing_at = now
+      } else if (status === 'ready') {
+        updateData.ready_at = now
+      } else if (status === 'delivered') {
+        updateData.delivered_at = now
       }
       const { error } = await supabase
         .from('orders')
@@ -252,7 +259,13 @@ export const useOrderStore = create<OrderState>()(
 
       set((state) => {
         const order = state.orders.find((o) => o.id === orderId)
-        if (order) order.status = status as any
+        if (order) {
+          order.status = status as any
+          if (status === 'preparing') order.preparing_at = now
+          if (status === 'ready') order.ready_at = now
+          if (status === 'delivered') order.delivered_at = now
+          if (status === 'completed') order.completed_at = now
+        }
         if (state.currentOrder?.id === orderId) {
           state.currentOrder.status = status as any
         }

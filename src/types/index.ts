@@ -46,13 +46,18 @@ export interface Order {
   shop_id: string
   order_number: number
   cashier_id: string | null
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled'
   total_amount: number | null
   subtotal: number | null
   tax_amount: number | null
   discount_amount: number
   payment_method: 'cash' | 'qr' | 'card' | null
   table_number: string | null
+  order_source: 'pos' | 'customer'
+  customer_session_id: string | null
+  preparing_at: string | null
+  ready_at: string | null
+  delivered_at: string | null
   created_at: string
   completed_at: string | null
   cancelled_at: string | null

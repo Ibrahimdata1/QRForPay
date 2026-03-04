@@ -20,14 +20,20 @@ import { Colors } from '../../constants/colors';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
-  confirmed: '#0F766E',
-  completed: '#059669',
+  confirmed: '#0891B2',
+  preparing: '#8B5CF6',
+  ready: '#059669',
+  delivered: '#0F766E',
+  completed: '#10B981',
   cancelled: '#EF4444',
 };
 
 const statusLabels: Record<string, string> = {
   pending: 'รอดำเนินการ',
   confirmed: 'ยืนยันแล้ว',
+  preparing: 'กำลังทำ',
+  ready: 'พร้อมเสิร์ฟ',
+  delivered: 'ส่งแล้ว',
   completed: 'สำเร็จ',
   cancelled: 'ยกเลิก',
 };
@@ -44,11 +50,12 @@ export default function OrdersScreen() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const cancelOrder = useOrderStore((s) => s.cancelOrder);
+  const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
   const isLoading = useOrderStore((s) => s.isLoading);
   const fetchError = useOrderStore((s) => s.fetchError);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled'>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -83,6 +90,28 @@ export default function OrdersScreen() {
     );
   };
 
+  const handleKitchenAction = (order: OrderWithItems, nextStatus: string, label: string) => {
+    Alert.alert(
+      `${label} #${order.order_number}`,
+      `ยืนยันเปลี่ยนสถานะเป็น "${statusLabels[nextStatus]}"?`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'ยืนยัน',
+          onPress: () => {
+            updateOrderStatus(order.id, nextStatus)
+              .then(() => {
+                if (shop?.id) fetchOrders(shop.id);
+              })
+              .catch((err: any) => {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'เปลี่ยนสถานะไม่สำเร็จ');
+              });
+          },
+        },
+      ]
+    );
+  };
+
   const handleAddItemsToOrder = (order: OrderWithItems) => {
     // Navigate to POS with resumeOrderId so the screen loads existing items
     router.push({
@@ -107,47 +136,94 @@ export default function OrdersScreen() {
     return `${date}  ${time}`;
   };
 
-  // Pending orders sorted by created_at ascending (oldest first = longest waiting)
-  const pendingOrders = orders
-    .filter((o) => o.status === 'pending')
+  // Active (non-completed/cancelled) orders sorted oldest-first
+  const activeOrders = orders
+    .filter((o) => !['completed', 'cancelled'].includes(o.status))
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-  const renderPendingCard = (order: OrderWithItems) => (
-    <TouchableOpacity
-      key={order.id}
-      style={styles.pendingCard}
-      activeOpacity={0.7}
-      onPress={() => setSelectedOrder(order)}
-    >
-      <View style={styles.pendingCardHeader}>
-        <View style={styles.pendingCardLeft}>
-          <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
-          {order.table_number ? (
-            <View style={styles.tableBadge}>
-              <Ionicons name="grid-outline" size={12} color="#0F766E" />
-              <Text style={styles.tableBadgeText}>โต๊ะ {order.table_number}</Text>
+  // Keep pendingOrders for the horizontal scroll section (legacy naming used below)
+  const pendingOrders = activeOrders;
+
+  const getKitchenAction = (order: OrderWithItems): { nextStatus: string; label: string; color: string } | null => {
+    switch (order.status) {
+      case 'pending':
+        return { nextStatus: 'preparing', label: 'กำลังทำ', color: '#8B5CF6' };
+      case 'confirmed':
+        return { nextStatus: 'preparing', label: 'กำลังทำ', color: '#8B5CF6' };
+      case 'preparing':
+        return { nextStatus: 'ready', label: 'พร้อมเสิร์ฟ', color: '#059669' };
+      case 'ready':
+        return { nextStatus: 'delivered', label: 'ส่งแล้ว', color: '#0F766E' };
+      default:
+        return null;
+    }
+  };
+
+  const renderPendingCard = (order: OrderWithItems) => {
+    const action = getKitchenAction(order);
+    const isCustomer = (order as any).order_source === 'customer';
+    const statusColor = statusColors[order.status] ?? '#9CA3AF';
+    return (
+      <TouchableOpacity
+        key={order.id}
+        style={[styles.pendingCard, isCustomer && styles.pendingCardCustomer]}
+        activeOpacity={0.7}
+        onPress={() => setSelectedOrder(order)}
+      >
+        <View style={styles.pendingCardHeader}>
+          <View style={styles.pendingCardLeft}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
+              {isCustomer ? (
+                <View style={styles.customerBadge}>
+                  <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
+                </View>
+              ) : null}
             </View>
+            {order.table_number ? (
+              <View style={styles.tableBadge}>
+                <Ionicons name="grid-outline" size={12} color="#0F766E" />
+                <Text style={styles.tableBadgeText}>โต๊ะ {order.table_number}</Text>
+              </View>
+            ) : null}
+            <View style={[styles.miniStatusBadge, { backgroundColor: statusColor + '22' }]}>
+              <Text style={[styles.miniStatusText, { color: statusColor }]}>
+                {statusLabels[order.status] ?? order.status}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.pendingTime}>{formatDateTime(order.created_at)}</Text>
+        </View>
+        <View style={styles.pendingCardFooter}>
+          <Text style={styles.pendingTotal}>฿{(order.total_amount ?? 0).toFixed(0)}</Text>
+          <Text style={styles.pendingItemCount}>{order.items?.length ?? 0} รายการ</Text>
+          {action ? (
+            <TouchableOpacity
+              style={[styles.kitchenActionButton, { backgroundColor: action.color }]}
+              onPress={() => handleKitchenAction(order, action.nextStatus, action.label)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.kitchenActionText}>{action.label}</Text>
+            </TouchableOpacity>
+          ) : order.status === 'pending' ? (
+            <TouchableOpacity
+              style={styles.addItemsButton}
+              onPress={() => handleAddItemsToOrder(order)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+              <Text style={styles.addItemsButtonText}>+ เพิ่มสินค้า</Text>
+            </TouchableOpacity>
           ) : null}
         </View>
-        <Text style={styles.pendingTime}>{formatDateTime(order.created_at)}</Text>
-      </View>
-      <View style={styles.pendingCardFooter}>
-        <Text style={styles.pendingTotal}>฿{(order.total_amount ?? 0).toFixed(0)}</Text>
-        <Text style={styles.pendingItemCount}>{order.items?.length ?? 0} รายการ</Text>
-        <TouchableOpacity
-          style={styles.addItemsButton}
-          onPress={() => handleAddItemsToOrder(order)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
-          <Text style={styles.addItemsButtonText}>+ เพิ่มสินค้า</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderOrder = ({ item }: { item: OrderWithItems }) => {
     const accentColor = statusColors[item.status] || '#9CA3AF';
+    const action = getKitchenAction(item);
+    const isCustomer = (item as any).order_source === 'customer';
     return (
       <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
         {/* Left accent bar */}
@@ -155,11 +231,16 @@ export default function OrdersScreen() {
 
         <View style={styles.cardBody}>
           <View style={styles.orderHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8, flexWrap: 'wrap' }}>
               <Text style={styles.orderNumber}>#{item.order_number}</Text>
               {item.table_number ? (
                 <View style={styles.tableTagSmall}>
                   <Text style={styles.tableTagText}>โต๊ะ {item.table_number}</Text>
+                </View>
+              ) : null}
+              {isCustomer ? (
+                <View style={styles.customerBadge}>
+                  <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
                 </View>
               ) : null}
             </View>
@@ -229,6 +310,17 @@ export default function OrdersScreen() {
             </View>
           ) : null}
 
+          {/* Kitchen action button for active orders */}
+          {action ? (
+            <TouchableOpacity
+              style={[styles.kitchenActionButton, { backgroundColor: action.color, marginBottom: 10 }]}
+              onPress={() => handleKitchenAction(item, action.nextStatus, action.label)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.kitchenActionText}>{action.label}</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={styles.orderFooter}>
             <Text style={styles.totalLabel}>ยอดรวม</Text>
             <Text style={styles.totalAmount}>฿{(item.total_amount ?? 0).toFixed(2)}</Text>
@@ -272,15 +364,15 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         ListHeaderComponent={
           <View>
-            {/* Pending / open tables section */}
+            {/* Active orders section (pending + kitchen workflow) */}
             {pendingOrders.length > 0 && (
               <View style={styles.pendingSection}>
                 <View style={styles.pendingSectionHeader}>
                   <View style={styles.pendingSectionTitleRow}>
                     <View style={styles.openDot} />
-                    <Text style={styles.pendingSectionTitle}>โต๊ะเปิดอยู่</Text>
+                    <Text style={styles.pendingSectionTitle}>ออเดอร์ที่ใช้งานอยู่</Text>
                   </View>
-                  <Text style={styles.pendingSectionCount}>{pendingOrders.length} โต๊ะ</Text>
+                  <Text style={styles.pendingSectionCount}>{pendingOrders.length} รายการ</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
                   {pendingOrders.map(renderPendingCard)}
@@ -299,14 +391,14 @@ export default function OrdersScreen() {
             {/* Status filter pills */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}>
-              {(['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const).map(s => (
+              {(['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'completed', 'cancelled'] as const).map(s => (
                 <TouchableOpacity key={s}
                   style={[styles.filterPill,
                     statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
                   onPress={() => setStatusFilter(s)}>
                   <Text style={[styles.filterPillText,
                     statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                    {s === 'all' ? 'ทั้งหมด' : s === 'pending' ? 'รอ' : s === 'confirmed' ? 'ยืนยันแล้ว' : s === 'completed' ? 'สำเร็จ' : 'ยกเลิก'}
+                    {s === 'all' ? 'ทั้งหมด' : statusLabels[s] ?? s}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -462,6 +554,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  kitchenActionButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  kitchenActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  customerBadge: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  customerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16A34A',
+  },
+  pendingCardCustomer: {
+    borderColor: '#86EFAC',
+    borderWidth: 1.5,
+  },
+  miniStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  miniStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   searchInput: {
     margin: 12,
