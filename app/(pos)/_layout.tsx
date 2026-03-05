@@ -1,24 +1,36 @@
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity, Alert } from 'react-native';
+import { TouchableOpacity, Alert, Platform } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
 
 export default function POSLayout() {
   const signOut = useAuthStore((s) => s.signOut);
 
-  const handleLogout = () => {
-    Alert.alert('ออกจากระบบ', 'ต้องการออกจากระบบ?', [
-      { text: 'ยกเลิก', style: 'cancel' },
-      {
-        text: 'ออกจากระบบ',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/login');
-        },
-      },
-    ]);
+  const handleLogout = async () => {
+    // On web use window.confirm (works reliably), on native use Alert
+    let confirmed = false;
+    if (Platform.OS === 'web') {
+      confirmed = window.confirm('ออกจากระบบ\n\nต้องการออกจากระบบ?');
+    } else {
+      await new Promise<void>((resolve) => {
+        Alert.alert('ออกจากระบบ', 'ต้องการออกจากระบบ?', [
+          { text: 'ยกเลิก', style: 'cancel', onPress: resolve },
+          {
+            text: 'ออกจากระบบ',
+            style: 'destructive',
+            onPress: () => {
+              signOut().then(() => router.replace('/(auth)/login')).finally(resolve);
+            },
+          },
+        ]);
+      });
+      return;
+    }
+    if (confirmed) {
+      await signOut();
+      router.replace('/(auth)/login');
+    }
   };
 
   return (
@@ -30,10 +42,11 @@ export default function POSLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 72,
-          paddingBottom: 16,
+          height: Platform.OS === 'web' ? 80 : 72,
+          paddingBottom: Platform.OS === 'web' ? 28 : 16,
           paddingTop: 8,
         },
+        tabBarShowLabel: Platform.OS !== 'web',
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
@@ -68,10 +81,10 @@ export default function POSLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'ขาย',
-          headerTitle: 'ร้านอาหาร',
+          title: 'โต๊ะสด',
+          headerTitle: 'ออเดอร์สด',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+            <Ionicons name="restaurant-outline" size={size} color={color} />
           ),
         }}
       />

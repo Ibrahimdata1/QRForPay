@@ -1,349 +1,568 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+// Live Table Order Monitor
+// Staff sees all active customer orders grouped by table in real time.
+// Status can be advanced (pending → preparing → ready → completed).
+// Emergency manual payment ("รับเงิน") marks payment as confirmed by staff.
+//
+// Customers place orders via QR code scan → /customer?shop=...&table=...
+// Staff does NOT enter orders here.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
-  Animated,
+  Alert,
+  RefreshControl,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
-import { ProductCard } from '../../components/ProductCard';
-import { CategoryFilter } from '../../components/CategoryFilter';
-import { useCartStore, selectItemCount } from '../../src/store/cartStore';
-import { useProductStore, selectFilteredProducts } from '../../src/store/productStore';
+import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOrderStore } from '../../src/store/orderStore';
-import { CartItem } from '../../src/types';
+import { Colors } from '../../constants/colors';
+import { OrderWithItems } from '../../src/types';
 
-const { width } = Dimensions.get('window');
-const NUM_COLUMNS = width > 600 ? 3 : 2;
+// ─── constants ───────────────────────────────────────────────────────────────
 
-export default function POSScreen() {
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'รอดำเนินการ',
+  preparing: 'กำลังทำ',
+  ready: 'พร้อมเสิร์ฟ',
+  completed: 'เสร็จสิ้น',
+  cancelled: 'ยกเลิก',
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#F59E0B',
+  preparing: '#8B5CF6',
+  ready: '#059669',
+  completed: '#10B981',
+  cancelled: '#EF4444',
+};
+
+const NEXT_STATUS: Record<string, string | null> = {
+  pending: 'preparing',
+  preparing: 'ready',
+  ready: 'completed',
+  completed: null,
+  cancelled: null,
+};
+
+const NEXT_LABEL: Record<string, string> = {
+  pending: 'เริ่มทำอาหาร',
+  preparing: 'พร้อมเสิร์ฟ',
+  ready: 'เสร็จสิ้น / ส่งแล้ว',
+};
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(n: number | null | undefined): string {
+  return '฿' + (n ?? 0).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diff < 1) return 'เมื่อกี้';
+  if (diff < 60) return `${diff} นาที`;
+  return `${Math.floor(diff / 60)} ชม.`;
+}
+
+// ─── component ───────────────────────────────────────────────────────────────
+
+export default function LiveTableMonitor() {
   const shop = useAuthStore((s) => s.shop);
+  const profile = useAuthStore((s) => s.profile);
+  const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
+  const completeOrder = useOrderStore((s) => s.completeOrder);
 
-  const fetchProducts = useProductStore((s) => s.fetchProducts);
-  const fetchCategories = useProductStore((s) => s.fetchCategories);
-  const categories = useProductStore((s) => s.categories);
-  const selectedCategoryId = useProductStore((s) => s.selectedCategoryId);
-  const searchQuery = useProductStore((s) => s.searchQuery);
-  const setSearch = useProductStore((s) => s.setSearch);
-  const setCategory = useProductStore((s) => s.setCategory);
-  const isLoading = useProductStore((s) => s.isLoading);
-  const filteredProducts = useProductStore(useShallow(selectFilteredProducts));
-  const products = useProductStore((s) => s.products);
+  const [activeOrders, setActiveOrders] = useState<OrderWithItems[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const addItem = useCartStore((s) => s.addItem);
-  const setResumeOrder = useCartStore((s) => s.setResumeOrder);
-  const resumeOrderId = useCartStore((s) => s.resumeOrderId);
-  const cartCount = useCartStore(selectItemCount);
+  // ── fetch ──────────────────────────────────────────────────────────────────
+  const fetchActive = useCallback(async () => {
+    if (!shop?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(
+          '*, items:order_items(id, quantity, unit_price, subtotal, product:products(name)), payment:payments(*)'
+        )
+        .eq('shop_id', shop.id)
+        .in('status', ['pending', 'preparing', 'ready'])
+        .order('created_at', { ascending: true });
 
-  const fetchPendingOrders = useOrderStore((s) => s.fetchPendingOrders);
+      if (error) throw error;
 
-  // Resume order param from navigation
-  const { resumeOrderId: paramResumeOrderId } = useLocalSearchParams<{ resumeOrderId?: string }>();
-
-  // Toast state
-  const [toastProduct, setToastProduct] = useState<string | null>(null);
-  const toastOpacity = useRef(new Animated.Value(0)).current;
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = (name: string) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToastProduct(name);
-    toastOpacity.setValue(0);
-    Animated.timing(toastOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      toastTimer.current = setTimeout(() => {
-        Animated.timing(toastOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }).start(() => setToastProduct(null));
-      }, 1500);
-    });
-  };
-
-  useEffect(() => {
-    if (shop?.id) {
-      fetchProducts(shop.id);
-      fetchCategories(shop.id);
+      setActiveOrders(
+        (data ?? []).map((o: any) => {
+          const rawPay = Array.isArray(o.payment) ? o.payment[0] : o.payment;
+          return { ...o, payment: rawPay ?? undefined } as OrderWithItems;
+        })
+      );
+    } catch (err: any) {
+      Alert.alert('โหลดข้อมูลไม่ได้', err?.message ?? 'กรุณาลองใหม่');
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
     }
   }, [shop?.id]);
 
-  // Handle resume order: load existing order items into cart
+  // ── realtime subscription ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!paramResumeOrderId || !shop?.id) return;
-    // Only load if we haven't already loaded this resume order
-    if (resumeOrderId === paramResumeOrderId) return;
+    if (!shop?.id) return;
+    channelRef.current = supabase
+      .channel(`monitor:${shop.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shop.id}` },
+        () => { fetchActive(); }
+      )
+      .subscribe();
+    return () => { channelRef.current?.unsubscribe(); };
+  }, [shop?.id, fetchActive]);
 
-    fetchPendingOrders(shop.id).then((pendingOrders) => {
-      const order = pendingOrders.find((o) => o.id === paramResumeOrderId);
-      if (!order) return;
+  // ── focus refresh ──────────────────────────────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      fetchActive();
+    }, [fetchActive])
+  );
 
-      // Build CartItem array from order items using product store
-      const cartItems: CartItem[] = order.items
-        .map((item) => {
-          const product = products.find((p) => p.id === item.product_id);
-          if (!product) return null;
-          return {
-            product,
-            quantity: item.quantity,
-            subtotal: item.subtotal,
-          };
-        })
-        .filter((i): i is CartItem => i !== null);
-
-      setResumeOrder(paramResumeOrderId, cartItems);
-    }).catch(() => {
-      // Non-critical: if loading fails just start fresh
-    });
-  }, [paramResumeOrderId, shop?.id, products]);
-
-  const categoryOptions = useMemo(() => {
-    const all = { id: 'all', label: 'ทั้งหมด' };
-    return [all, ...categories.map((c) => ({ id: c.id, label: c.name }))];
-  }, [categories]);
-
-  const handleCategorySelect = (id: string) => {
-    setCategory(id === 'all' ? null : id);
+  // ── actions ────────────────────────────────────────────────────────────────
+  const handleAdvance = (order: OrderWithItems) => {
+    const next = NEXT_STATUS[order.status];
+    if (!next) return;
+    const label = NEXT_LABEL[order.status];
+    Alert.alert(
+      label,
+      `ออเดอร์ #${order.order_number}${order.table_number ? ` · โต๊ะ ${order.table_number}` : ''}`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: label,
+          onPress: async () => {
+            try {
+              await updateOrderStatus(order.id, next);
+              fetchActive();
+            } catch (err: any) {
+              Alert.alert('เกิดข้อผิดพลาด', err?.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
-  if (isLoading && filteredProducts.length === 0) {
+  const handleManualPay = (order: OrderWithItems) => {
+    Alert.alert(
+      'รับเงินสด / ยืนยันชำระ',
+      `ยืนยันรับชำระ ${fmt(order.total_amount)} สำหรับออเดอร์ #${order.order_number}${order.table_number ? ` โต๊ะ ${order.table_number}` : ''}`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'ยืนยันรับเงินแล้ว',
+          onPress: async () => {
+            try {
+              await completeOrder(
+                order.id,
+                { method: 'cash', amount: order.total_amount ?? 0 },
+                'manual',
+                profile?.id
+              );
+              fetchActive();
+            } catch (err: any) {
+              Alert.alert('เกิดข้อผิดพลาด', err?.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ── group by table ─────────────────────────────────────────────────────────
+  const groups = activeOrders.reduce<Record<string, OrderWithItems[]>>((acc, o) => {
+    const key = o.table_number ?? '__none__';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(o);
+    return acc;
+  }, {});
+
+  const tableKeys = Object.keys(groups).sort((a, b) => {
+    if (a === '__none__') return 1;
+    if (b === '__none__') return -1;
+    const na = parseInt(a), nb = parseInt(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  // ── render ─────────────────────────────────────────────────────────────────
+  if (isLoading && activeOrders.length === 0) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>กำลังโหลดออเดอร์...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Resume order banner */}
-      {resumeOrderId ? (
-        <View style={styles.resumeBanner}>
-          <Ionicons name="refresh-circle-outline" size={16} color="#0F766E" />
-          <Text style={styles.resumeBannerText}>เพิ่มสินค้าในออเดอร์เดิม — เลือกสินค้าแล้วไปหน้าตะกร้า</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={Colors.text.light} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="ค้นหาสินค้า..."
-          placeholderTextColor={Colors.text.light}
-          value={searchQuery}
-          onChangeText={setSearch}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => { setRefreshing(true); fetchActive(); }}
+          colors={[Colors.primary]}
+          tintColor={Colors.primary}
         />
-        {searchQuery ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={20} color={Colors.text.light} />
-          </TouchableOpacity>
-        ) : null}
+      }
+    >
+      {/* Live indicator */}
+      <View style={styles.liveRow}>
+        <View style={styles.liveDot} />
+        <Text style={styles.liveText}>ออเดอร์สด · {activeOrders.length} รายการ</Text>
+        <Text style={styles.liveHint}>ลากลงเพื่อรีเฟรช</Text>
       </View>
 
-      <CategoryFilter
-        categories={categoryOptions}
-        selected={selectedCategoryId || 'all'}
-        onSelect={handleCategorySelect}
-      />
+      {tableKeys.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="restaurant-outline" size={64} color={Colors.text.light} />
+          <Text style={styles.emptyTitle}>ยังไม่มีออเดอร์</Text>
+          <Text style={styles.emptySubtitle}>
+            ลูกค้าสแกน QR โต๊ะเพื่อสั่งอาหาร{'\n'}
+            ออเดอร์จะปรากฏที่นี่โดยอัตโนมัติ
+          </Text>
+        </View>
+      ) : (
+        tableKeys.map((key) => {
+          const orders = groups[key];
+          const tableLabel = key === '__none__' ? 'ไม่ระบุโต๊ะ' : `โต๊ะ ${key}`;
+          return (
+            <View key={key} style={styles.tableCard}>
+              {/* Table header */}
+              <View style={styles.tableHeader}>
+                <View style={styles.tableHeaderLeft}>
+                  <Ionicons name="grid-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.tableName}>{tableLabel}</Text>
+                </View>
+                <Text style={styles.orderCount}>{orders.length} ออเดอร์</Text>
+              </View>
 
-      <FlatList
-        data={filteredProducts}
-        numColumns={NUM_COLUMNS}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.productGrid}
-        columnWrapperStyle={styles.columnWrapper}
-        renderItem={({ item }) => (
-          <ProductCard
-            product={item}
-            onPress={(p) => {
-              addItem(p);
-              showToast(p.name);
-            }}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search" size={48} color={Colors.text.light} />
-            <Text style={styles.emptyText}>ไม่พบสินค้า</Text>
-            {selectedCategoryId ? (
-              <TouchableOpacity onPress={() => setCategory(null)} activeOpacity={0.7}>
-                <Text style={styles.emptyHintLink}>ลองกด &quot;ทั้งหมด&quot; เพื่อดูสินค้าทั้งหมด</Text>
-              </TouchableOpacity>
-            ) : searchQuery ? (
-              <Text style={styles.emptyHint}>ลองค้นหาด้วยคำอื่น</Text>
-            ) : null}
-          </View>
-        }
-      />
+              {/* Orders in this table */}
+              {orders.map((order, idx) => {
+                const sColor = STATUS_COLOR[order.status] ?? '#999';
+                const sLabel = STATUS_LABEL[order.status] ?? order.status;
+                const nextStatus = NEXT_STATUS[order.status];
+                const isPaid = order.payment?.status === 'success';
+                const items: any[] = (order as any).items ?? [];
+                const isLast = idx === orders.length - 1;
 
-      {cartCount > 0 && (
-        <TouchableOpacity
-          style={styles.cartButton}
-          onPress={() => router.push('/(pos)/cart')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="cart" size={24} color={Colors.surface} />
-          <Text style={styles.cartButtonText}>ตะกร้า</Text>
-          <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>{cartCount}</Text>
-          </View>
-        </TouchableOpacity>
+                return (
+                  <View
+                    key={order.id}
+                    style={[styles.orderCard, isLast && styles.orderCardLast]}
+                  >
+                    {/* Order top row */}
+                    <View style={styles.orderTop}>
+                      <View style={styles.orderNumRow}>
+                        <Text style={styles.orderNum}>#{order.order_number}</Text>
+                        <Text style={styles.orderTime}>{timeAgo(order.created_at)}</Text>
+                        {order.order_source === 'customer' && (
+                          <View style={styles.sourceBadge}>
+                            <Text style={styles.sourceBadgeText}>QR</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: sColor + '22', borderColor: sColor },
+                        ]}
+                      >
+                        <Text style={[styles.statusText, { color: sColor }]}>
+                          {sLabel}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Items */}
+                    <View style={styles.itemsList}>
+                      {items.slice(0, 5).map((item: any) => (
+                        <Text key={item.id} style={styles.itemRow}>
+                          {item.product?.name ?? 'สินค้า'} ×{item.quantity}
+                          {'  '}
+                          <Text style={styles.itemPrice}>
+                            {fmt(item.subtotal)}
+                          </Text>
+                        </Text>
+                      ))}
+                      {items.length > 5 && (
+                        <Text style={styles.itemMore}>
+                          +{items.length - 5} รายการ
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* Total + payment */}
+                    <View style={styles.orderBottom}>
+                      <Text style={styles.orderTotal}>{fmt(order.total_amount)}</Text>
+                      {isPaid ? (
+                        <View style={styles.paidBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                          <Text style={styles.paidText}>ชำระแล้ว</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.payBtn}
+                          onPress={() => handleManualPay(order)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="cash-outline" size={14} color="#fff" />
+                          <Text style={styles.payBtnText}>รับเงิน</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Advance status button */}
+                    {nextStatus && (
+                      <TouchableOpacity
+                        style={[styles.advanceBtn, { borderColor: sColor }]}
+                        onPress={() => handleAdvance(order)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.advanceBtnText, { color: sColor }]}>
+                          {NEXT_LABEL[order.status]}
+                        </Text>
+                        <Ionicons name="arrow-forward" size={14} color={sColor} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })
       )}
-
-      {toastProduct !== null && (
-        <Animated.View style={[styles.toast, { opacity: toastOpacity }]} pointerEvents="none">
-          <Text style={styles.toastText}>+ เพิ่ม {toastProduct} แล้ว</Text>
-        </Animated.View>
-      )}
-    </View>
+    </ScrollView>
   );
 }
+
+// ─── styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
-  resumeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ECFDF5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#A7F3D0',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  content: {
+    padding: 12,
+    paddingBottom: 100,
   },
-  resumeBannerText: {
-    fontSize: 13,
-    color: '#0F766E',
-    fontWeight: '600',
+  centered: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
   },
-  searchContainer: {
+  loadingText: {
+    marginTop: 12,
+    color: Colors.text.secondary,
+    fontSize: 15,
+  },
+  liveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    marginBottom: 12,
+    gap: 8,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#059669',
+  },
+  liveText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  liveHint: {
+    fontSize: 12,
+    color: Colors.text.light,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 80,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginTop: 16,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  tableCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    overflow: 'hidden',
   },
-  searchIcon: {
-    marginRight: 8,
+  tableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary + '12',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  searchInput: {
-    flex: 1,
-    height: 48,
+  tableHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tableName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  orderCount: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  orderCard: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  orderCardLast: {
+    borderBottomWidth: 0,
+  },
+  orderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderNumRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  orderNum: {
     fontSize: 15,
+    fontWeight: '700',
     color: Colors.text.primary,
   },
-  productGrid: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 110,
-  },
-  columnWrapper: {
-    justifyContent: 'space-between',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-  },
-  emptyText: {
-    fontSize: 15,
+  orderTime: {
+    fontSize: 12,
     color: Colors.text.light,
-    marginTop: 12,
   },
-  emptyHint: {
-    fontSize: 13,
-    color: Colors.text.light,
-    marginTop: 6,
-    opacity: 0.75,
+  sourceBadge: {
+    backgroundColor: Colors.primary + '20',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  emptyHintLink: {
-    fontSize: 13,
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
     color: Colors.primary,
-    marginTop: 6,
-    textDecorationLine: 'underline',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
     fontWeight: '600',
   },
-  toast: {
-    position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
-    backgroundColor: Colors.success,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 6,
+  itemsList: {
+    marginBottom: 10,
+    gap: 2,
   },
-  toastText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  itemRow: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+  },
+  itemPrice: {
+    color: Colors.text.light,
+  },
+  itemMore: {
+    fontSize: 12,
+    color: Colors.text.light,
+    fontStyle: 'italic',
+  },
+  orderBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderTotal: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  paidBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  paidText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#059669',
   },
-  cartButton: {
-    position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
+  payBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: Colors.primary,
-    borderRadius: 16,
-    height: 60,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  payBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  advanceBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1.5,
   },
-  cartButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginLeft: 10,
-  },
-  cartBadge: {
-    backgroundColor: '#F59E0B',
-    borderRadius: 12,
-    minWidth: 26,
-    height: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-    paddingHorizontal: 6,
-  },
-  cartBadgeText: {
-    color: '#FFFFFF',
+  advanceBtnText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '600',
   },
 });

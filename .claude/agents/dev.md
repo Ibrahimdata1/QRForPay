@@ -17,9 +17,55 @@ description: Senior developer agent สำหรับ QRForPay POS production a
 - Stack: React Native Expo ~52, Expo Router ~4, Supabase, Zustand v5+Immer, NativeWind, TypeScript
 - Working dir: `/Users/ibrahim/Downloads/QRForPay/`
 - Stores: `src/store/` — cartStore, orderStore, productStore, authStore, ingredientStore
-- Screens: `app/(pos)/` — index, cart, orders, products, inventory, dashboard, settings
+- Screens: `app/(pos)/` — index, cart, orders, products, inventory, dashboard, settings, tables
+- Customer web: `app/(customer)/customer.tsx` → URL `/customer` (NOT index.tsx — Expo Router group transparent rule)
 - Components: `components/` — ProductCard, CartItem, QRPaymentModal, OrderDetailModal, ProductFormModal, CategoryFilter
 - DB: Supabase PostgreSQL, RLS enabled ทุก table, project `qaiiqchxzkebudscijgb`
+
+## Architecture: Staff App vs Customer Web
+```
+Staff (เจ้าของร้าน/พนักงาน):
+  → Native mobile app: expo start
+  → ไม่ต้องผ่าน Vercel เลย
+  → app/(pos)/* screens
+
+Customer (ลูกค้า):
+  → สแกน QR code จากโต๊ะ
+  → เปิด https://dist-two-rose-32.vercel.app/customer?shop=<id>&table=<num>
+  → app/(customer)/customer.tsx (Vercel-hosted SPA)
+  → ต้อง deploy ด้วย: bash deploy-web.sh (ไม่ใช่ expo export ตรงๆ)
+```
+
+## Vercel Deploy Rules
+- **ต้องใช้ `bash deploy-web.sh` เสมอ** — ห้ามรัน `expo export` + `vercel` ตรงๆ
+  - เหตุผล: Vercel exclude paths ที่มี `node_modules` → font ไม่โหลด → icons เป็น □
+  - script จะ copy fonts ไป `dist/_expo/static/fonts/` + inject `@font-face` CSS
+- **`.env` ต้องมี**: `EXPO_PUBLIC_APP_BASE_URL=https://dist-two-rose-32.vercel.app`
+  - ถ้าไม่ set → QR code ใน mobile app จะชี้ local IP → ลูกค้าแสกนไม่ได้
+
+## Expo Router Critical Rules
+- Group `(name)` คือ URL-transparent: `(customer)/index.tsx` → URL `/` ไม่ใช่ `/customer`
+- ถ้าต้องการ URL `/customer` → ไฟล์ต้องเป็น `(customer)/customer.tsx`
+- ทุกครั้งที่เพิ่ม/เปลี่ยนชื่อไฟล์ใน group → ตรวจ `_layout.tsx` ว่า `Stack.Screen name=` ตรงกัน
+
+## Cross-Platform Dialog Pattern (Web + Native)
+ห้ามใช้ `Alert.alert` สำหรับ confirmation บน web — ใช้ pattern นี้แทน:
+```typescript
+function webConfirm(title: string, message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (Platform.OS === 'web') {
+      resolve(window.confirm(`${title}\n\n${message}`));
+    } else {
+      Alert.alert(title, message, [
+        { text: 'ยกเลิก', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'ยืนยัน', onPress: () => resolve(true) },
+      ]);
+    }
+  });
+}
+```
+- `window.confirm` = synchronous บน web → ทำงานได้แม้ใน early-return render pattern
+- Custom Promise-modal ไม่ทำงานกับ Expo Router early-return (modal JSX ไม่ถูก render)
 
 ## How to Work
 1. **Read ก่อนเสมอ** — อ่านไฟล์ที่จะแก้ + store ที่เกี่ยวข้อง ก่อนเขียนโค้ดใดๆ
@@ -86,3 +132,22 @@ description: Senior developer agent สำหรับ QRForPay POS production a
 - ห้าม force push หรือ reset --hard โดยไม่ได้รับอนุญาต
 - ห้าม commit โดยตรง ถ้า CTO ไม่ได้สั่ง
 - ห้ามเพิ่ม persist store ใหม่โดยไม่อัพเดต `authStore.signOut()`
+
+---
+
+## HANDOFF (ส่งกลับ CTO เมื่อเสร็จ)
+
+```
+---HANDOFF---
+FROM: dev | TO: cto
+STATUS: DONE | BLOCKED | NEEDS_REVIEW
+SPEC: [SPEC-ID]
+FILES: [file:line, file:line]
+DB: yes/no | AUTH: yes/no | VISUAL: yes/no
+TESTS: X/Y pass
+ISSUES: none | [n — ระบุสั้นๆ]
+SUMMARY: [1 บรรทัด — สิ่งที่แก้/เพิ่ม]
+---
+```
+
+กฎ: ส่ง HANDOFF block ก่อนเสมอ — ห้ามเขียน prose ยาวโดยไม่มี block นี้

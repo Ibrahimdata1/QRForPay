@@ -74,14 +74,20 @@ QRForPay/
 │   ├── _layout.tsx               ← Root: ตรวจ login แล้วส่งไปหน้าที่ถูก
 │   ├── (auth)/
 │   │   └── login.tsx             ← หน้า login
-│   ├── (pos)/                    ← ทุกหน้าหลังล็อกอิน
-│   │   ├── _layout.tsx           ← แถบ tab ด้านล่าง 5 แท็บ
-│   │   ├── index.tsx             ← หน้าขาย (เลือกสินค้า)
-│   │   ├── cart.tsx              ← ตะกร้า + ชำระเงิน
-│   │   ├── orders.tsx            ← ประวัติออเดอร์
+│   ├── (pos)/                    ← ทุกหน้าหลังล็อกอิน (staff only)
+│   │   ├── _layout.tsx           ← แถบ tab ด้านล่าง
+│   │   ├── index.tsx             ← โต๊ะสด — จอมอนิเตอร์ออเดอร์ realtime
+│   │   ├── orders.tsx            ← ประวัติออเดอร์ทั้งหมด
+│   │   ├── tables.tsx            ← สร้าง QR ต่อโต๊ะ (staff print/show)
 │   │   ├── products.tsx          ← จัดการสินค้า
-│   │   └── dashboard.tsx         ← สรุปยอดขาย
-│   └── qr-payment.tsx            ← หน้าแสดง QR รอจ่ายเงิน
+│   │   ├── inventory.tsx         ← จัดการวัตถุดิบ/สต๊อก
+│   │   ├── dashboard.tsx         ← สรุปยอดขาย
+│   │   ├── settings.tsx          ← ตั้งค่าร้าน
+│   │   └── cart.tsx              ← (hidden) ตะกร้า legacy
+│   ├── (customer)/               ← หน้าลูกค้า — ไม่ต้อง login
+│   │   ├── _layout.tsx           ← ErrorBoundary, no auth guard
+│   │   └── index.tsx             ← เมนู + สั่งอาหาร + ชำระเงิน QR
+│   └── qr-payment.tsx            ← Modal QR รอจ่าย (legacy staff flow)
 │
 ├── components/                   ← UI ที่ใช้ซ้ำหลายหน้า
 │   ├── ProductCard.tsx           ← การ์ดสินค้าในหน้าขาย
@@ -142,6 +148,87 @@ import { router } from 'expo-router'
 router.push('/qr-payment')          // ไปหน้าใหม่ (กลับได้)
 router.replace('/(pos)')            // ไปหน้าใหม่แล้วลบหน้าเก่าออก (กลับไม่ได้)
 router.back()                       // กลับหน้าก่อนหน้า
+```
+
+---
+
+## ระบบสั่งอาหารผ่าน QR โต๊ะ (Customer QR Ordering)
+
+โมเดลหลักของแอพนี้คือ **ลูกค้าสั่งเองผ่านโทรศัพท์** — พนักงานไม่ต้องรับออเดอร์
+
+### Flow ทั้งหมด
+
+```
+พนักงาน:
+  1. เปิดแท็บ "โต๊ะ QR" → เลือกหมายเลขโต๊ะ → กด "สร้าง QR"
+  2. พิมพ์ QR หรือตั้งจอบนโต๊ะ
+
+ลูกค้า:
+  3. สแกน QR ด้วยกล้องโทรศัพท์
+  4. เบราเซอร์เปิด http://<IP>:8081/customer?shop=<shopId>&table=<num>
+  5. เลือกเมนู → เพิ่มใส่ตะกร้า → กด "สั่งและชำระเงิน"
+  6. สแกน PromptPay QR ด้วยแอปธนาคาร
+  7. หน้าสถานะอัพเดตอัตโนมัติ (realtime)
+
+พนักงาน (จอ "โต๊ะสด"):
+  8. เห็นออเดอร์ใหม่ปรากฏทันที (realtime)
+  9. กด "เริ่มทำอาหาร" → "พร้อมเสิร์ฟ" → "เสร็จสิ้น"
+  10. ถ้าลูกค้าจ่ายเงินสด: กด "รับเงิน" (manual payment override)
+```
+
+### กฎสำคัญ
+
+| กฎ | รายละเอียด |
+|----|-----------|
+| **ลูกค้าสั่งเอง** | orders สร้างผ่าน anon Supabase client เท่านั้น |
+| **table_number บังคับ** | customer orders ต้องมี table_number (CHECK constraint) |
+| **ยกเลิกไม่ได้** | ไม่มีปุ่มยกเลิกบนหน้าลูกค้า |
+| **ยกเลิกได้** | พนักงานยกเลิกได้จากแท็บ "ออเดอร์" |
+| **Anti-table-switching** | sessionStorage ตรวจจับการเปลี่ยนโต๊ะในแท็บเดียวกัน |
+| **Manual payment** | พนักงานกด "รับเงิน" → บันทึกใน payments (confirmation_type='manual') |
+
+### URL ที่ใช้
+
+```
+/customer?shop=<shopId>&table=<tableNumber>
+
+ตัวอย่าง: http://192.168.1.107:8081/customer?shop=11111111-1111-1111-1111-111111111111&table=3
+```
+
+### รันสำหรับทดสอบ QR
+
+```bash
+# วิธีที่ 1 — ใช้ start.sh (auto-detect IP)
+bash start.sh
+
+# วิธีที่ 2 — manual
+npx expo start --web --host lan
+# แล้วแก้ .env: EXPO_PUBLIC_APP_BASE_URL=http://<IP-ของเครื่อง>:8081
+```
+
+> **สำคัญ**: ต้องใช้ `--web` mode เท่านั้น เพราะลูกค้าเปิดผ่านเบราเซอร์
+
+### DB Columns ที่เกี่ยวข้อง
+
+```sql
+orders.order_source        -- 'pos' หรือ 'customer'
+orders.table_number        -- หมายเลขโต๊ะ (TEXT, required สำหรับ customer orders)
+orders.customer_session_id -- session UUID สำหรับ track ออเดอร์
+payments.confirmation_type -- 'manual' หรือ 'auto'
+payments.confirmed_by      -- UUID ของพนักงานที่กด manual confirm
+```
+
+### Migrations ที่ต้อง apply
+
+```bash
+# 1. Base schema
+psql $DB_URL -f supabase/schema.sql
+
+# 2. Customer ordering support (anon RLS, order_source, etc.)
+psql $DB_URL -f supabase/migrations/20260304120000_customer_ordering.sql
+
+# 3. Table monitor setup (payment_overrides, constraints)
+psql $DB_URL -f supabase/migrations/20260305000000_table_monitor_setup.sql
 ```
 
 ---
@@ -582,7 +669,7 @@ cto สั่งงาน → dev แก้ → qa ตรวจ → security ต
 
 ## Demo Accounts (Development)
 
-**ร้าน 1 — EasyShop Demo** (`11111111-1111-1111-1111-111111111111`)
+**ร้าน 1 — QRForPay Demo** (`11111111-1111-1111-1111-111111111111`)
 | Role | UUID |
 |------|------|
 | Owner | `82e5d187-a910-4669-852e-25a90b8c448e` |

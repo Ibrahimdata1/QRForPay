@@ -1,10 +1,10 @@
 import { useRef, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, ScrollView,
-  Animated, StyleSheet, Dimensions,
+  Animated, StyleSheet, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { OrderWithItems } from '../src/types';
+import { OrderWithItems, OrderItem } from '../src/types';
 import { useProductStore } from '../src/store/productStore';
 import { Colors } from '../constants/colors';
 
@@ -36,9 +36,11 @@ interface OrderDetailModalProps {
   onClose: () => void;
   onCancel?: (order: OrderWithItems) => void;
   onPayPending?: (order: OrderWithItems) => void;
+  onCancelItem?: (orderId: string, itemId: string, cancelledBy: string) => void;
+  profileId?: string;
 }
 
-export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending }: OrderDetailModalProps) {
+export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending, onCancelItem, profileId }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
   const productMap = useMemo(
@@ -64,6 +66,36 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
   }, [visible]);
 
   if (!order) return null;
+
+  const canCancelItems =
+    onCancelItem != null &&
+    profileId != null &&
+    order.status !== 'completed' &&
+    order.status !== 'cancelled';
+
+  const handleCancelItem = (item: OrderItem, productName: string) => {
+    if (!onCancelItem || !profileId) return;
+    Alert.alert(
+      'ยกเลิกรายการ',
+      `ยืนยันยกเลิก "${productName}"?`,
+      [
+        { text: 'ไม่', style: 'cancel' },
+        {
+          text: 'ยืนยัน',
+          style: 'destructive',
+          onPress: () => onCancelItem(order.id, item.id, profileId),
+        },
+      ]
+    );
+  };
+
+  const cancelledItemCount = (order.items ?? []).filter(
+    (i) => (i.item_status ?? 'active') === 'cancelled'
+  ).length;
+
+  const activeTotal = (order.items ?? [])
+    .filter((i) => (i.item_status ?? 'active') === 'active')
+    .reduce((sum, i) => sum + Number(i.subtotal), 0);
 
   const formatDateTime = (str: string) => {
     const d = new Date(str);
@@ -106,20 +138,53 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
 
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
           {/* Items */}
-          <Text style={styles.sectionTitle}>รายการสินค้า</Text>
-          {order.items?.map((item, idx) => (
-            <View key={item.id ?? idx} style={styles.itemRow}>
-              <View style={styles.itemLeft}>
-                <Text style={styles.itemName} numberOfLines={1}>
-                  {productMap[item.product_id] || (item as any).product_name || (item as any).name || `สินค้า #${idx + 1}`}
-                </Text>
-                <Text style={styles.itemUnit}>
-                  {item.quantity} × ฿{item.unit_price.toFixed(0)}
-                </Text>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>รายการสินค้า</Text>
+            {cancelledItemCount > 0 ? (
+              <Text style={styles.cancelledItemsNote}>
+                (มีรายการที่ยกเลิก {cancelledItemCount} รายการ)
+              </Text>
+            ) : null}
+          </View>
+          {order.items?.map((item, idx) => {
+            const isCancelled = (item.item_status ?? 'active') === 'cancelled';
+            const productName = productMap[item.product_id] || (item as any).product_name || (item as any).name || `สินค้า #${idx + 1}`;
+            const cancellerName = item.item_cancelled_by_profile?.full_name ?? null;
+            return (
+              <View key={item.id ?? idx} style={[styles.itemRow, isCancelled && styles.itemRowCancelled]}>
+                <View style={styles.itemLeft}>
+                  <Text style={[styles.itemName, isCancelled && styles.itemNameCancelled]} numberOfLines={1}>
+                    {productName}
+                  </Text>
+                  <Text style={[styles.itemUnit, isCancelled && styles.itemUnitCancelled]}>
+                    {item.quantity} × ฿{item.unit_price.toFixed(0)}
+                  </Text>
+                  {isCancelled && (
+                    <View style={styles.itemCancelledBadge}>
+                      <Text style={styles.itemCancelledBadgeText}>
+                        {cancellerName ? `ยกเลิกโดย ${cancellerName}` : 'ยกเลิกแล้ว'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.itemRight}>
+                  <Text style={[styles.itemSubtotal, isCancelled && styles.itemSubtotalCancelled]}>
+                    ฿{item.subtotal.toFixed(0)}
+                  </Text>
+                  {!isCancelled && canCancelItems ? (
+                    <TouchableOpacity
+                      style={styles.itemCancelBtn}
+                      onPress={() => handleCancelItem(item, productName)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
-              <Text style={styles.itemSubtotal}>฿{item.subtotal.toFixed(0)}</Text>
-            </View>
-          ))}
+            );
+          })}
 
           {/* Summary */}
           <View style={styles.divider} />
@@ -141,7 +206,9 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>รวมทั้งหมด</Text>
-            <Text style={styles.totalValue}>฿{(order.total_amount ?? 0).toFixed(2)}</Text>
+            <Text style={styles.totalValue}>
+              ฿{(cancelledItemCount > 0 ? activeTotal : (order.total_amount ?? 0)).toFixed(2)}
+            </Text>
           </View>
 
           {/* Payment method */}
@@ -313,14 +380,24 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 10,
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text.secondary,
-    marginTop: 16,
-    marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  cancelledItemsNote: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '500',
   },
   itemRow: {
     flexDirection: 'row',
@@ -330,21 +407,59 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
-  itemLeft: { flex: 1, marginRight: 12 },
+  itemRowCancelled: {
+    backgroundColor: '#FEF2F2',
+    marginHorizontal: -4,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+  },
+  itemLeft: { flex: 1, marginRight: 8 },
+  itemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   itemName: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text.primary,
+  },
+  itemNameCancelled: {
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
   },
   itemUnit: {
     fontSize: 12,
     color: Colors.text.secondary,
     marginTop: 2,
   },
+  itemUnitCancelled: {
+    color: '#D1D5DB',
+  },
+  itemCancelledBadge: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  itemCancelledBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
   itemSubtotal: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  itemSubtotalCancelled: {
+    color: '#D1D5DB',
+    textDecorationLine: 'line-through',
+  },
+  itemCancelBtn: {
+    padding: 2,
   },
   divider: {
     height: 1,

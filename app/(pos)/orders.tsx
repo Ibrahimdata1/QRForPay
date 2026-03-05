@@ -46,6 +46,7 @@ export default function OrdersScreen() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const cancelOrder = useOrderStore((s) => s.cancelOrder);
+  const cancelOrderItem = useOrderStore((s) => s.cancelOrderItem);
   const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
   const isLoading = useOrderStore((s) => s.isLoading);
   const fetchError = useOrderStore((s) => s.fetchError);
@@ -342,8 +343,8 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         ListHeaderComponent={
           <View>
-            {/* Active orders section (pending + kitchen workflow) */}
-            {pendingOrders.length > 0 && (
+            {/* Active orders section (pending + kitchen workflow) — hide when filtering by completed/cancelled */}
+            {pendingOrders.length > 0 && (statusFilter === 'all' || statusFilter === 'pending' || statusFilter === 'preparing' || statusFilter === 'ready') && (
               <View style={styles.pendingSection}>
                 <View style={styles.pendingSectionHeader}>
                   <View style={styles.pendingSectionTitleRow}>
@@ -400,6 +401,16 @@ export default function OrdersScreen() {
         onClose={() => setSelectedOrder(null)}
         onCancel={handleCancelOrder}
         onPayPending={handlePayPendingOrder}
+        profileId={profile?.id}
+        onCancelItem={(orderId, itemId, cancelledBy) => {
+          cancelOrderItem(orderId, itemId, cancelledBy)
+            .then(() => {
+              if (shop?.id) fetchOrders(shop.id);
+            })
+            .catch((err: any) => {
+              Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยกเลิกรายการไม่สำเร็จ');
+            });
+        }}
       />
     </View>
   );

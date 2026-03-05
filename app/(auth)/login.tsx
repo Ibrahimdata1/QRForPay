@@ -227,6 +227,7 @@ const styles = StyleSheet.create({
     height: 48,
     fontSize: 15,
     color: Colors.text.primary,
+    ...(Platform.OS === 'web' && { outlineWidth: 0 }),
   },
   eyeIcon: {
     padding: 4,

@@ -30,6 +30,7 @@ interface OrderState {
   updateOrderStatus: (orderId: string, status: string) => Promise<void>
   completeOrder: (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => Promise<void>
   cancelOrder: (orderId: string, cancelledBy: string, reason?: string) => Promise<void>
+  cancelOrderItem: (orderId: string, itemId: string, cancelledBy: string) => Promise<void>
   fetchOrders: (shopId: string, limit?: number) => Promise<void>
   subscribeToOrder: (orderId: string) => () => void
 }
@@ -337,6 +338,75 @@ export const useOrderStore = create<OrderState>()(
       })
     },
 
+    cancelOrderItem: async (orderId: string, itemId: string, cancelledBy: string) => {
+      const now = new Date().toISOString()
+
+      // 1. Soft-cancel the item
+      const { error: itemError } = await supabase
+        .from('order_items')
+        .update({
+          item_status: 'cancelled',
+          item_cancelled_by: cancelledBy,
+          item_cancelled_at: now,
+        })
+        .eq('id', itemId)
+
+      if (itemError) throw itemError
+
+      // 2. Re-fetch all items for this order to check cancellation state
+      const { data: allItems, error: fetchError } = await supabase
+        .from('order_items')
+        .select('id, item_status, subtotal')
+        .eq('order_id', orderId)
+
+      if (fetchError) throw fetchError
+
+      const items = allItems ?? []
+      const activeItems = items.filter((i: any) => (i.item_status ?? 'active') === 'active')
+
+      if (activeItems.length === 0) {
+        // All items cancelled — cascade to cancel the whole order
+        await get().cancelOrder(orderId, cancelledBy)
+      } else {
+        // Recalculate total from active items only
+        const newTotal = activeItems.reduce((sum: number, i: any) => sum + Number(i.subtotal), 0)
+
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({ total_amount: newTotal })
+          .eq('id', orderId)
+
+        if (orderError) throw orderError
+
+        // Also update pending payment amount
+        await supabase
+          .from('payments')
+          .update({ amount: newTotal })
+          .eq('order_id', orderId)
+          .eq('status', 'pending')
+      }
+
+      // 3. Update local state
+      set((state) => {
+        const order = state.orders.find((o) => o.id === orderId)
+        if (order) {
+          const item = order.items?.find((i) => i.id === itemId)
+          if (item) {
+            item.item_status = 'cancelled'
+            item.item_cancelled_by = cancelledBy
+            item.item_cancelled_at = now
+          }
+          // Recalculate total_amount from active items
+          const activeLocal = (order.items ?? []).filter(
+            (i) => (i.item_status ?? 'active') === 'active'
+          )
+          if (activeLocal.length > 0) {
+            order.total_amount = activeLocal.reduce((sum, i) => sum + Number(i.subtotal), 0)
+          }
+        }
+      })
+    },
+
     fetchOrders: async (shopId: string, limit: number = 50) => {
       set((state) => {
         state.isLoading = true
@@ -346,7 +416,7 @@ export const useOrderStore = create<OrderState>()(
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('*, items:order_items(*), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)')
+          .select('*, items:order_items(*, item_cancelled_by_profile:profiles!order_items_item_cancelled_by_fkey(full_name)), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)')
           .eq('shop_id', shopId)
           .order('created_at', { ascending: false })
           .limit(limit)

@@ -72,6 +72,10 @@ export interface OrderItem {
   quantity: number
   unit_price: number
   subtotal: number
+  item_status?: 'active' | 'cancelled'
+  item_cancelled_by?: string | null
+  item_cancelled_at?: string | null
+  item_cancelled_by_profile?: { full_name: string } | null
 }
 
 export interface Payment {

@@ -20,6 +20,8 @@ export function CategoryFilter({ categories, selected, onSelect }: CategoryFilte
         horizontal
         showsHorizontalScrollIndicator={true}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
       >
         {categories.map((cat) => {
           const isActive = selected === cat.id;

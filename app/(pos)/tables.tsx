@@ -24,11 +24,10 @@ import { Colors } from '../../constants/colors';
 // Number of quick-select table buttons shown
 const QUICK_TABLES = Array.from({ length: 20 }, (_, i) => String(i + 1));
 
-// Base URL for the customer ordering web interface.
-// Override via EXPO_PUBLIC_APP_BASE_URL in .env (e.g. https://pos.yourshop.com).
+// Base URL for the customer ordering web interface — always points to Vercel.
+// QR codes must work from any network (customer's phone data, not just WiFi).
 const APP_BASE_URL =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_APP_BASE_URL) ||
-  'http://localhost:8081';
+  process.env.EXPO_PUBLIC_APP_BASE_URL ?? 'https://dist-two-rose-32.vercel.app';
 
 function buildCustomerUrl(shopId: string, table: string): string {
   // Expo Router: customer group index is at /customer?shop=...&table=...
@@ -166,10 +165,9 @@ export default function TablesScreen() {
       </View>
 
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>ตั้งค่า URL</Text>
+        <Text style={styles.infoTitle}>URL สั่งอาหารของร้าน</Text>
         <Text style={styles.infoText}>
-          ตั้ง EXPO_PUBLIC_APP_BASE_URL ใน .env เป็น URL ของแอปในเครือข่าย{'\n'}
-          เช่น http://192.168.1.10:8081{'\n'}
+          ลูกค้าใช้เน็ตไหนก็สแกนได้ ไม่ต้องอยู่ WiFi เดียวกัน{'\n'}
           ปัจจุบัน: {APP_BASE_URL}
         </Text>
       </View>

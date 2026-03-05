@@ -100,3 +100,22 @@ description: Security Specialist agent สำหรับ QRForPay POS productio
 [ ] ไม่มี secret ใน source code หรือ git history
 [ ] WEBHOOK_SECRET ถูก set ใน Edge Function secrets (ไม่ใช่ hardcode)
 ```
+
+---
+
+## HANDOFF (ส่งกลับ CTO เมื่อเสร็จ)
+
+```
+---HANDOFF---
+FROM: security | TO: cto
+STATUS: DONE | BLOCKED | NEEDS_REVIEW
+SPEC: [SPEC-ID]
+FILES: [files audited]
+DB: yes/no | AUTH: yes/no | VISUAL: no
+TESTS: N/A
+ISSUES: none | [P0:n, P1:n, P2:n]
+SUMMARY: [1 บรรทัด — clear / found P0/P1 ที่ต้องแก้]
+---
+```
+
+กฎ: ถ้า ISSUES มี P0 หรือ P1 → CTO ต้องอ่าน full report ทันที — ห้าม proceed

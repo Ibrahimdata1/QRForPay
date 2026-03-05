@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EasyShop",
-    "slug": "easyshop-pos",
+    "name": "QRForPay",
+    "slug": "qrforpay-pos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "easyshop",
+    "scheme": "qrforpay",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
@@ -17,9 +17,9 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.easyshop.pos",
+      "bundleIdentifier": "com.qrforpay.pos",
       "infoPlist": {
-        "NSCameraUsageDescription": "EasyShop needs camera access to scan QR codes for payments."
+        "NSCameraUsageDescription": "QRForPay needs camera access to scan QR codes for payments."
       }
     },
     "android": {
@@ -27,13 +27,14 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0066CC"
       },
-      "package": "com.easyshop.pos",
+      "package": "com.qrforpay.pos",
       "permissions": [
         "android.permission.CAMERA"
       ]
     },
     "web": {
       "bundler": "metro",
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
@@ -41,7 +42,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow EasyShop to access your camera for QR code scanning."
+          "cameraPermission": "Allow QRForPay to access your camera for QR code scanning."
         }
       ],
       "@react-native-community/datetimepicker",

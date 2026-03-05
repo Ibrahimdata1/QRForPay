@@ -3,7 +3,11 @@ module.exports = function (api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      'react-native-reanimated/plugin' // ตัวนี้ต้องอยู่ล่างสุดเสมอ ถูกต้องแล้วครับ
+      // Converts import.meta.env.MODE → process.env.NODE_ENV so Metro's CommonJS
+      // bundle doesn't contain bare import.meta syntax, which browsers reject as
+      // a SyntaxError when the script tag has no type="module" attribute.
+      'babel-plugin-transform-import-meta',
+      'react-native-reanimated/plugin', // ต้องอยู่ล่างสุดเสมอ
     ],
   };
 };

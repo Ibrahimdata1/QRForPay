@@ -88,3 +88,22 @@ description: UX/UI Specialist agent สำหรับ QRForPay POS production a
 [ ] ไม่มี Critical หรือ High issue ค้างอยู่
 [ ] ทุก fix ที่ implement → npx jest ผ่าน 100%
 ```
+
+---
+
+## HANDOFF (ส่งกลับ CTO เมื่อเสร็จ)
+
+```
+---HANDOFF---
+FROM: uxui | TO: cto
+STATUS: DONE | BLOCKED | NEEDS_REVIEW
+SPEC: [SPEC-ID]
+FILES: [file:line, file:line]
+DB: no | AUTH: no | VISUAL: yes
+TESTS: N/A
+ISSUES: none | [n Critical, n High, n Medium]
+SUMMARY: [1 บรรทัด — audit ผ่าน / found X issues]
+---
+```
+
+กฎ: ส่ง HANDOFF block ก่อนเสมอ — ถ้า ISSUES=0 CTO ไม่ต้องอ่าน full report

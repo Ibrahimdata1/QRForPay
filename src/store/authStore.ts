@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { supabase } from '../lib/supabase'
 import { Profile, Shop } from '../types'
-import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { useCartStore } from './cartStore'
@@ -143,16 +142,23 @@ export const useAuthStore = create<AuthState>()(
     },
 
     signOut: async () => {
-      // Clear cart and resume order before signing out so nothing leaks to the next session/shop
+      // Clear local state FIRST so navigation to login happens immediately
+      // even if the Supabase network call fails (e.g. offline mode).
       useCartStore.getState().clearResumeOrder()
       useCartStore.getState().clearCart()
-
-      await supabase.auth.signOut()
       set((state) => {
         state.user = null
         state.profile = null
         state.shop = null
       })
+
+      // Best-effort server-side sign-out (revokes token).
+      // Non-critical — local state already cleared above.
+      try {
+        await supabase.auth.signOut()
+      } catch {
+        // Ignore — user is already signed out locally.
+      }
     },
 
     registerPushToken: async (userId: string) => {
@@ -160,6 +166,11 @@ export const useAuthStore = create<AuthState>()(
         // Push notifications require a development build — not available in Expo Go (SDK 53+)
         if (Platform.OS === 'web') return
         if (Constants.executionEnvironment === 'storeClient') return // Expo Go — skip silently
+
+        // require() instead of dynamic import() — jest.mock() can intercept require
+        // but cannot reliably intercept import() in Jest's CommonJS transform mode.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Notifications = require('expo-notifications')
 
         const { status: existingStatus } = await Notifications.getPermissionsAsync()
         let finalStatus = existingStatus
