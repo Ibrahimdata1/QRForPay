@@ -3,8 +3,8 @@ import {
   View,
   Text,
   TextInput,
-  FlatList,
   ScrollView,
+  RefreshControl,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -66,7 +66,7 @@ export default function OrdersScreen() {
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
   const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
-  const [viewMode, setViewMode] = useState<'kitchen' | 'bills'>('kitchen');
+  const [showSearch, setShowSearch] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [billPayModal, setBillPayModal] = useState<{
     tableNumber: string;
@@ -220,10 +220,12 @@ export default function OrdersScreen() {
             text: 'ยืนยัน',
             onPress: async () => {
               try {
-                for (const order of billOrders) {
+                for (let i = 0; i < billOrders.length; i++) {
+                  const order = billOrders[i];
+                  const isLast = i === billOrders.length - 1;
                   await completeOrder(
                     order.id,
-                    { method: 'cash', amount: order.total_amount ?? 0, cash_received: received, cash_change: change },
+                    { method: 'cash', amount: order.total_amount ?? 0, ...(isLast ? { cash_received: received, cash_change: change } : {}) },
                     'manual',
                     profile.id
                   );
@@ -231,6 +233,7 @@ export default function OrdersScreen() {
                 setBillPayModal(null);
                 if (shop?.id) fetchOrders(shop.id);
               } catch (err: any) {
+                if (shop?.id) fetchOrders(shop.id);
                 Alert.alert('เกิดข้อผิดพลาด', err.message || 'ชำระเงินไม่สำเร็จ');
               }
             },
@@ -316,13 +319,21 @@ export default function OrdersScreen() {
     return `${date}  ${time}`;
   };
 
-  // Active (non-completed/cancelled) orders sorted oldest-first
-  const activeOrders = orders
-    .filter((o) => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready')
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  // Pending + preparing orders for top section (sorted oldest-first, pending before preparing)
+  const pendingOrders = orders
+    .filter((o) => o.status === 'pending' || o.status === 'preparing')
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
 
-  // Keep pendingOrders for the horizontal scroll section (legacy naming used below)
-  const pendingOrders = activeOrders;
+  const timeAgo = (dateStr: string) => {
+    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+    if (mins < 1) return 'เมื่อสักครู่';
+    if (mins < 60) return `${mins} นาทีที่แล้ว`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs} ชม.ที่แล้ว`;
+  };
 
   // Combined table bills for bills mode
   const tableBills = useMemo(() => {
@@ -344,16 +355,19 @@ export default function OrdersScreen() {
         allItems: (() => {
           const raw = tableOrders.flatMap(o =>
             (o.items ?? []).filter(i => (i as any).item_status === undefined || (i as any).item_status === 'active')
+              .map(i => ({ ...i, _orderId: o.id, _orderNumber: o.order_number }))
           );
-          // Merge items with same product_id
-          const merged: Record<string, { product: any; quantity: number; subtotal: number; id: string }> = {};
+          // Merge items with same product_id, keep source references
+          const merged: Record<string, { product: any; quantity: number; subtotal: number; id: string; sourceItems: { id: string; orderId: string; orderNumber: number; quantity: number; subtotal: number }[] }> = {};
           raw.forEach(i => {
             const pid = i.product_id;
+            const sourceRef = { id: (i as any).id ?? pid, orderId: (i as any)._orderId, orderNumber: (i as any)._orderNumber, quantity: i.quantity, subtotal: i.subtotal ?? 0 };
             if (merged[pid]) {
               merged[pid].quantity += i.quantity;
               merged[pid].subtotal += (i.subtotal ?? 0);
+              merged[pid].sourceItems.push(sourceRef);
             } else {
-              merged[pid] = { product: (i as any).product, quantity: i.quantity, subtotal: i.subtotal ?? 0, id: (i as any).id ?? pid };
+              merged[pid] = { product: (i as any).product, quantity: i.quantity, subtotal: i.subtotal ?? 0, id: (i as any).id ?? pid, sourceItems: [sourceRef] };
             }
           });
           return Object.values(merged);
@@ -377,46 +391,43 @@ export default function OrdersScreen() {
     const action = getKitchenAction(order);
     const isCustomer = (order as any).order_source === 'customer';
     const isNew = newOrderIds.includes(order.id);
-    const statusColor = statusColors[order.status] ?? '#9CA3AF';
+    const isPending = order.status === 'pending';
+    const cardStyle = isPending ? styles.pendingCardPink : styles.pendingCardYellow;
     return (
       <TouchableOpacity
         key={order.id}
-        style={[styles.pendingCard, isCustomer && styles.pendingCardCustomer, isNew && styles.newOrderCard]}
+        style={[styles.pendingCard, cardStyle, isCustomer && styles.pendingCardCustomer, isNew && styles.newOrderCard]}
         activeOpacity={0.7}
         onPress={() => setSelectedOrder(order)}
       >
         <View style={styles.pendingCardHeader}>
-          <View style={styles.pendingCardLeft}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
-              {isNew ? (
-                <View style={styles.newBadge}>
-                  <Text style={styles.newBadgeText}>ใหม่!</Text>
-                </View>
-              ) : null}
-              {isCustomer ? (
-                <View style={styles.customerBadge}>
-                  <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
-                </View>
-              ) : null}
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
             {order.table_number ? (
-              <View style={styles.tableBadge}>
-                <Ionicons name="grid-outline" size={12} color="#0F766E" />
-                <Text style={styles.tableBadgeText}>โต๊ะ {order.table_number}</Text>
+              <Text style={styles.pendingTableText}>· โต๊ะ {order.table_number}</Text>
+            ) : null}
+          </View>
+          <Text style={styles.pendingTime}>{timeAgo(order.created_at)}</Text>
+        </View>
+        {(isNew || isCustomer) ? (
+          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+            {isNew ? (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>ใหม่!</Text>
               </View>
             ) : null}
-            <View style={[styles.miniStatusBadge, { backgroundColor: statusColor + '22' }]}>
-              <Text style={[styles.miniStatusText, { color: statusColor }]}>
-                {statusLabels[order.status] ?? order.status}
-              </Text>
-            </View>
+            {isCustomer ? (
+              <View style={styles.customerBadge}>
+                <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.pendingTime}>{formatDateTime(order.created_at)}</Text>
-        </View>
+        ) : null}
         <View style={styles.pendingCardFooter}>
-          <Text style={styles.pendingTotal}>฿{(order.total_amount ?? 0).toFixed(0)}</Text>
-          <Text style={styles.pendingItemCount}>{order.items?.length ?? 0} รายการ</Text>
+          <View style={styles.pendingCardFooterTop}>
+            <Text style={styles.pendingTotal} numberOfLines={1}>฿{(order.total_amount ?? 0).toLocaleString('th-TH')}</Text>
+            <Text style={styles.pendingItemCount}>{order.items?.length ?? 0} รายการ</Text>
+          </View>
           {action ? (
             <TouchableOpacity
               style={[styles.kitchenActionButton, { backgroundColor: action.color }]}
@@ -425,143 +436,11 @@ export default function OrdersScreen() {
             >
               <Text style={styles.kitchenActionText}>{action.label}</Text>
             </TouchableOpacity>
-          ) : order.status === 'pending' ? (
-            <TouchableOpacity
-              style={styles.addItemsButton}
-              onPress={() => handleAddItemsToOrder(order)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-              <Text style={styles.addItemsButtonText}>+ เพิ่มสินค้า</Text>
-            </TouchableOpacity>
           ) : null}
         </View>
       </TouchableOpacity>
     );
   };
-
-  const renderOrder = useCallback(({ item }: { item: OrderWithItems }) => {
-    const accentColor = statusColors[item.status] || '#9CA3AF';
-    const action = getKitchenAction(item);
-    const isCustomer = (item as any).order_source === 'customer';
-    const isNew = newOrderIds.includes(item.id);
-    return (
-      <TouchableOpacity style={[styles.orderCard, isNew && styles.newOrderCard]} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
-        {/* Left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: isNew ? '#DC2626' : accentColor }]} />
-
-        <View style={styles.cardBody}>
-          <View style={styles.orderHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8, flexWrap: 'wrap' }}>
-              <Text style={styles.orderNumber}>#{item.order_number}</Text>
-              {isNew ? (
-                <View style={styles.newBadge}>
-                  <Text style={styles.newBadgeText}>ใหม่!</Text>
-                </View>
-              ) : null}
-              {item.table_number ? (
-                <View style={styles.tableTagSmall}>
-                  <Text style={styles.tableTagText}>โต๊ะ {item.table_number}</Text>
-                </View>
-              ) : null}
-              {isCustomer ? (
-                <View style={styles.customerBadge}>
-                  <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
-                </View>
-              ) : null}
-            </View>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: accentColor + '1A' },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusText,
-                  { color: accentColor },
-                ]}
-              >
-                {statusLabels[item.status] || item.status}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.orderMeta}>
-            <View style={styles.detailRow}>
-              <Ionicons name="time-outline" size={14} color={colors.text.light} />
-              <Text style={styles.detailText}>{formatDateTime(item.created_at)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="cube-outline" size={14} color={colors.text.light} />
-              <Text style={styles.detailText}>{item.items?.length ?? 0} รายการ</Text>
-            </View>
-            {item.payment_method ? (
-              <View style={styles.detailRow}>
-                <Ionicons name="card-outline" size={14} color={colors.text.light} />
-                <Text style={styles.detailText}>
-                  {methodLabels[item.payment_method] || item.payment_method}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {item.status === 'cancelled' && item.cancelledByProfile?.full_name ? (
-            <View style={styles.confirmationRow}>
-              <View style={[styles.confirmBadge, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="close-circle-outline" size={11} color="#EF4444" />
-                <Text style={[styles.confirmBadgeText, { color: '#EF4444' }]}>
-                  ยกเลิกโดย {item.cancelledByProfile.full_name}
-                </Text>
-              </View>
-            </View>
-          ) : item.payment?.confirmation_type ? (
-            <View style={styles.confirmationRow}>
-              {item.payment.confirmation_type === 'manual' ? (
-                <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
-                  <Ionicons name="hand-left-outline" size={11} color="#D97706" />
-                  <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>ยืนยันเอง</Text>
-                  {item.confirmedByProfile?.full_name ? (
-                    <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>
-                      {' '}· {item.confirmedByProfile.full_name}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
-                  <Ionicons name="flash-outline" size={11} color="#0F766E" />
-                  <Text style={[styles.confirmBadgeText, { color: '#0F766E' }]}>อัตโนมัติ</Text>
-                </View>
-              )}
-            </View>
-          ) : null}
-
-          {/* Kitchen action button for active orders */}
-          {action ? (
-            <TouchableOpacity
-              style={[styles.kitchenActionButton, { backgroundColor: action.color, marginBottom: 10 }]}
-              onPress={() => handleKitchenAction(item, action.nextStatus)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.kitchenActionText}>{action.label}</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          <View style={styles.orderFooter}>
-            <Text style={styles.totalLabel}>ยอดรวม</Text>
-            <Text style={styles.totalAmount}>฿{(item.total_amount ?? 0).toFixed(2)}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [newOrderIds]);
-
-  const filteredOrders = orders.filter(order => {
-    const matchSearch = searchText === '' ||
-      String(order.order_number).includes(searchText);
-    const matchStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
 
   // Guard: super_admin has no shop — show admin empty state
   if (!shop) {
@@ -595,267 +474,351 @@ export default function OrdersScreen() {
           <Text style={styles.errorBannerText}>{fetchError}</Text>
         </View>
       ) : null}
-      <FlatList
+      <ScrollView
         style={{ flex: 1 }}
-        data={viewMode === 'kitchen' ? filteredOrders : []}
-        keyExtractor={(item) => item.id}
-        renderItem={renderOrder}
         contentContainerStyle={styles.listContent}
-        onRefresh={() => {
-          if (!shop?.id) return;
-          setRefreshing(true);
-          fetchOrders(shop.id).finally(() => setRefreshing(false));
-        }}
-        refreshing={refreshing}
-        removeClippedSubviews
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        ListHeaderComponent={
-          <View>
-            {/* Segment control: kitchen vs bills */}
-            <View style={styles.segmentRow}>
-              <TouchableOpacity
-                style={[styles.segmentBtn, viewMode === 'kitchen' && styles.segmentBtnActive]}
-                onPress={() => setViewMode('kitchen')}
-              >
-                <Ionicons name="flame-outline" size={16} color={viewMode === 'kitchen' ? '#fff' : colors.text.secondary} />
-                <Text style={[styles.segmentText, viewMode === 'kitchen' && styles.segmentTextActive]}>ครัว</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.segmentBtn, viewMode === 'bills' && styles.segmentBtnActive]}
-                onPress={() => setViewMode('bills')}
-              >
-                <Ionicons name="receipt-outline" size={16} color={viewMode === 'bills' ? '#fff' : colors.text.secondary} />
-                <Text style={[styles.segmentText, viewMode === 'bills' && styles.segmentTextActive]}>
-                  บิลรวมโต๊ะ{tableBills.length > 0 ? ` (${tableBills.length})` : ''}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {viewMode === 'kitchen' ? (
-              <>
-                {/* Active orders section (pending + kitchen workflow) — hide when filtering by completed/cancelled */}
-                {pendingOrders.length > 0 && (statusFilter === 'all' || statusFilter === 'pending' || statusFilter === 'preparing' || statusFilter === 'ready') && (
-                  <View style={styles.pendingSection}>
-                    <View style={styles.pendingSectionHeader}>
-                      <View style={styles.pendingSectionTitleRow}>
-                        <View style={styles.openDot} />
-                        <Text style={styles.pendingSectionTitle}>ออเดอร์ที่ใช้งานอยู่</Text>
-                      </View>
-                      <Text style={styles.pendingSectionCount}>{pendingOrders.length} รายการ</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
-                      {pendingOrders.map(renderPendingCard)}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {/* Search */}
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="ค้นหาเลขออเดอร์..."
-                  placeholderTextColor={colors.text.light}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-                {/* Status filter pills */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterRow}>
-                  {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(s => (
-                    <TouchableOpacity key={s}
-                      style={[styles.filterPill,
-                        statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
-                      onPress={() => setStatusFilter(s)}>
-                      <Text style={[styles.filterPillText,
-                        statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                        {s === 'all' ? 'ทั้งหมด' : statusLabels[s] ?? s}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : (
-              /* Bills mode: render all table bill cards here */
-              tableBills.length > 0 ? (
-                <View style={{ marginTop: 8 }}>
-                  {tableBills.map((bill) => (
-                    <View key={bill.tableNumber} style={styles.billCard}>
-                      <View style={styles.billHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Ionicons name="grid-outline" size={18} color={colors.primary} />
-                          <Text style={styles.billTableNum}>โต๊ะ {bill.tableNumber}</Text>
-                        </View>
-                        <Text style={styles.billOrderCount}>{bill.orders.length} ออเดอร์</Text>
-                      </View>
-
-                      {/* Status overview */}
-                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                        {(['pending', 'preparing', 'ready'] as const).map(st => {
-                          const count = bill.orders.filter(o => o.status === st).length;
-                          if (count === 0) return null;
-                          return (
-                            <View key={st} style={[styles.miniStatusBadge, { backgroundColor: (statusColors[st] ?? '#9CA3AF') + '22' }]}>
-                              <Text style={[styles.miniStatusText, { color: statusColors[st] ?? '#9CA3AF' }]}>
-                                {statusLabels[st]} {count}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-
-                      {/* Orders breakdown */}
-                      {bill.orders.map((order) => {
-                        const activeItems = (order.items ?? []).filter(
-                          (i: any) => (i.item_status ?? 'active') === 'active'
-                        );
-                        const orderStatusColor = statusColors[order.status] ?? '#9CA3AF';
-                        return (
-                          <View key={order.id} style={styles.billOrderSection}>
-                            <View style={styles.billOrderHeader}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                                <Text style={styles.billOrderNum}>#{order.order_number}</Text>
-                                <View style={[styles.miniStatusBadge, { backgroundColor: orderStatusColor + '22' }]}>
-                                  <Text style={[styles.miniStatusText, { color: orderStatusColor }]}>
-                                    {statusLabels[order.status] ?? order.status}
-                                  </Text>
-                                </View>
-                              </View>
-                              <TouchableOpacity
-                                style={styles.billCancelBtn}
-                                onPress={() => {
-                                  const isCooked = order.status === 'preparing' || order.status === 'ready';
-                                  const itemCount = activeItems.length;
-                                  const warning = isCooked ? '\n⚠️ อาหารกำลังทำ/ทำเสร็จแล้ว' : '';
-                                  Alert.alert(
-                                    `ยกเลิกออเดอร์ #${order.order_number}`,
-                                    `ยกเลิกทั้งออเดอร์ (${itemCount} รายการ ฿${(order.total_amount ?? 0).toFixed(0)})?${warning}`,
-                                    [
-                                      { text: 'ไม่ยกเลิก', style: 'cancel' },
-                                      {
-                                        text: 'ยืนยันยกเลิก',
-                                        style: 'destructive',
-                                        onPress: () => {
-                                          if (!profile?.id) return;
-                                          cancelOrder(order.id, profile.id)
-                                            .then(() => { if (shop?.id) fetchOrders(shop.id); })
-                                            .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
-                                        },
-                                      },
-                                    ]
-                                  );
-                                }}
-                              >
-                                <Ionicons name="trash-outline" size={15} color="#EF4444" />
-                              </TouchableOpacity>
-                            </View>
-                            {activeItems.map((item: any, idx: number) => (
-                              <View key={item.id ?? idx} style={styles.billItemRow}>
-                                <Text style={styles.billItemName} numberOfLines={1}>
-                                  {item.product?.name ?? 'สินค้า'}
-                                </Text>
-                                <Text style={styles.billItemQty}>x{item.quantity}</Text>
-                                <Text style={styles.billItemPrice}>฿{(item.subtotal ?? 0).toFixed(0)}</Text>
-                                <TouchableOpacity
-                                  style={styles.billItemCancelBtn}
-                                  onPress={() => {
-                                    const itemName = item.product?.name ?? 'สินค้า';
-                                    const isCooked = order.status === 'preparing' || order.status === 'ready';
-                                    const warning = isCooked ? '\n⚠️ อาหารกำลังทำ/ทำเสร็จแล้ว' : '';
-                                    Alert.alert(
-                                      `ยกเลิก "${itemName}"`,
-                                      `ลบ ${itemName} x${item.quantity} (฿${(item.subtotal ?? 0).toFixed(0)}) ออกจากออเดอร์ #${order.order_number}?${warning}`,
-                                      [
-                                        { text: 'ไม่ยกเลิก', style: 'cancel' },
-                                        {
-                                          text: 'ยืนยันยกเลิก',
-                                          style: 'destructive',
-                                          onPress: () => {
-                                            if (!profile?.id) return;
-                                            cancelOrderItem(order.id, item.id, profile.id)
-                                              .then(() => { if (shop?.id) fetchOrders(shop.id); })
-                                              .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
-                                          },
-                                        },
-                                      ]
-                                    );
-                                  }}
-                                >
-                                  <Ionicons name="close-circle" size={18} color="#EF4444" />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                            {/* Cancelled items (strikethrough) */}
-                            {(order.items ?? []).filter((i: any) => i.item_status === 'cancelled').map((item: any, idx: number) => (
-                              <View key={`cancelled-${item.id ?? idx}`} style={[styles.billItemRow, { opacity: 0.4 }]}>
-                                <Text style={[styles.billItemName, { textDecorationLine: 'line-through' }]} numberOfLines={1}>
-                                  {item.product?.name ?? 'สินค้า'}
-                                </Text>
-                                <Text style={[styles.billItemQty, { textDecorationLine: 'line-through' }]}>x{item.quantity}</Text>
-                                <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '500' }}>ยกเลิก</Text>
-                              </View>
-                            ))}
-                          </View>
-                        );
-                      })}
-
-                      {/* Total */}
-                      <View style={styles.billTotalRow}>
-                        <Text style={styles.billTotalLabel}>ยอดรวม</Text>
-                        <Text style={styles.billTotalAmount}>฿{bill.totalAmount.toFixed(0)}</Text>
-                      </View>
-
-                      {/* Payment buttons */}
-                      <View style={styles.billPayBtns}>
-                        <TouchableOpacity
-                          style={[styles.billPayBtn, { backgroundColor: colors.primary }]}
-                          onPress={() => setBillPayModal({
-                            tableNumber: bill.tableNumber,
-                            orders: bill.orders,
-                            totalAmount: bill.totalAmount,
-                            method: 'qr',
-                            cashInput: '',
-                          })}
-                        >
-                          <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-                          <Text style={styles.billPayBtnText}>ยืนยันรับโอน</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.billPayBtn, { backgroundColor: '#059669' }]}
-                          onPress={() => setBillPayModal({
-                            tableNumber: bill.tableNumber,
-                            orders: bill.orders,
-                            totalAmount: bill.totalAmount,
-                            method: 'cash',
-                            cashInput: '',
-                          })}
-                        >
-                          <Ionicons name="cash-outline" size={16} color="#fff" />
-                          <Text style={styles.billPayBtnText}>รับเงินสด</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.billEmptyContainer}>
-                  <Ionicons name="receipt-outline" size={56} color={colors.text.light} />
-                  <Text style={styles.billEmptyText}>ไม่มีโต๊ะที่มีออเดอร์ค้างอยู่</Text>
-                </View>
-              )
-            )}
-          </View>
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (!shop?.id) return;
+              setRefreshing(true);
+              fetchOrders(shop.id).finally(() => setRefreshing(false));
+            }}
+          />
         }
-        ListEmptyComponent={viewMode === 'kitchen' ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={colors.text.light} />
-            <Text style={styles.emptyText}>
-              {searchText !== '' || statusFilter !== 'all'
-                ? 'ไม่พบออเดอร์ที่ตรงกับการค้นหา'
-                : 'ยังไม่มีรายการ'}
+      >
+        {/* ===== Section 1: ออเดอร์ที่ต้องจัดการ ===== */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.openDot} />
+            <Text style={styles.pendingSectionTitle}>
+              ออเดอร์ที่ต้องจัดการ{pendingOrders.length > 0 ? ` (${pendingOrders.length})` : ''}
             </Text>
           </View>
-        ) : null}
-      />
+          <TouchableOpacity onPress={() => setShowSearch(s => !s)} style={styles.searchIconBtn}>
+            <Ionicons name={showSearch ? 'close-circle' : 'search'} size={20} color={colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search bar + filter pills (hidden by default) */}
+        {showSearch && (
+          <View>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="ค้นหาเลขออเดอร์..."
+              placeholderTextColor={colors.text.light}
+              value={searchText}
+              onChangeText={setSearchText}
+              autoFocus
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}>
+              {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(s => (
+                <TouchableOpacity key={s}
+                  style={[styles.filterPill,
+                    statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
+                  onPress={() => setStatusFilter(s)}>
+                  <Text style={[styles.filterPillText,
+                    statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                    {s === 'all' ? 'ทั้งหมด' : statusLabels[s] ?? s}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {pendingOrders.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
+            {pendingOrders.map(renderPendingCard)}
+          </ScrollView>
+        ) : (
+          <Text style={styles.emptyInlineText}>ไม่มีออเดอร์ใหม่</Text>
+        )}
+
+        {/* ===== Section 2: บิลรวมโต๊ะ ===== */}
+        <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="receipt-outline" size={16} color={colors.text.primary} />
+            <Text style={styles.pendingSectionTitle}>
+              บิลรวมโต๊ะ{tableBills.length > 0 ? ` (${tableBills.length})` : ''}
+            </Text>
+          </View>
+        </View>
+
+        {tableBills.length > 0 ? (
+          <View style={{ marginTop: 8 }}>
+            {tableBills.map((bill) => (
+              <View key={bill.tableNumber} style={styles.billCard}>
+                <View style={styles.billHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Ionicons name="grid-outline" size={18} color={colors.primary} />
+                    <Text style={styles.billTableNum}>โต๊ะ {bill.tableNumber}</Text>
+                    <Text style={styles.billOrderCount}>{bill.orders.length} ออเดอร์</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.billCancelAllBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        `ยกเลิกทั้งโต๊ะ ${bill.tableNumber}`,
+                        `ยกเลิกทุกออเดอร์ (${bill.orders.length} รายการ ฿${bill.totalAmount.toFixed(0)})?\nการกระทำนี้ไม่สามารถย้อนกลับได้`,
+                        [
+                          { text: 'ไม่ยกเลิก', style: 'cancel' },
+                          {
+                            text: 'ยืนยันยกเลิกทั้งโต๊ะ',
+                            style: 'destructive',
+                            onPress: async () => {
+                              if (!profile?.id) return;
+                              let failed = 0;
+                              for (const order of bill.orders) {
+                                try {
+                                  await cancelOrder(order.id, profile.id);
+                                } catch {
+                                  failed++;
+                                }
+                              }
+                              if (shop?.id) fetchOrders(shop.id);
+                              if (failed > 0) {
+                                Alert.alert('ผิดพลาด', `ยกเลิกไม่สำเร็จ ${failed} จาก ${bill.orders.length} ออเดอร์`);
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    <Text style={styles.billCancelAllText}>ยกเลิกทั้งโต๊ะ</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Status overview */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {(['pending', 'preparing', 'ready'] as const).map(st => {
+                    const count = bill.orders.filter(o => o.status === st).length;
+                    if (count === 0) return null;
+                    return (
+                      <View key={st} style={[styles.miniStatusBadge, { backgroundColor: (statusColors[st] ?? '#9CA3AF') + '22' }]}>
+                        <Text style={[styles.miniStatusText, { color: statusColors[st] ?? '#9CA3AF' }]}>
+                          {statusLabels[st]} {count}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Merged items list (no duplicates) */}
+                {bill.allItems.map((item: any, idx: number) => (
+                  <View key={item.id ?? idx} style={styles.billItemRow}>
+                    <Text style={styles.billItemName} numberOfLines={1}>
+                      {item.product?.name ?? 'สินค้า'}
+                    </Text>
+                    <Text style={styles.billItemQty}>x{item.quantity}</Text>
+                    <Text style={styles.billItemPrice}>฿{item.subtotal.toFixed(0)}</Text>
+                    <TouchableOpacity
+                      style={styles.billItemCancelBtn}
+                      onPress={() => {
+                        const sources: any[] = item.sourceItems ?? [];
+                        if (sources.length === 0) return;
+                        const itemName = item.product?.name ?? 'สินค้า';
+                        if (sources.length === 1) {
+                          // Single source -- cancel directly
+                          const src = sources[0];
+                          Alert.alert(
+                            `ยกเลิก "${itemName}"`,
+                            `ลบ ${itemName} x${src.quantity} จากออเดอร์ #${src.orderNumber}?`,
+                            [
+                              { text: 'ไม่ลบ', style: 'cancel' },
+                              {
+                                text: 'ยืนยันลบ',
+                                style: 'destructive',
+                                onPress: () => {
+                                  if (!profile?.id) return;
+                                  cancelOrderItem(src.orderId, src.id, profile.id)
+                                    .then(() => { if (shop?.id) fetchOrders(shop.id); })
+                                    .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
+                                },
+                              },
+                            ]
+                          );
+                        } else {
+                          // Multiple sources -- let user pick which order's item to cancel
+                          const buttons = sources.map((src: any) => ({
+                            text: `#${src.orderNumber} (x${src.quantity})`,
+                            onPress: () => {
+                              Alert.alert(
+                                `ยืนยันลบ "${itemName}"`,
+                                `ลบ ${itemName} x${src.quantity} จากออเดอร์ #${src.orderNumber}?`,
+                                [
+                                  { text: 'ไม่ลบ', style: 'cancel' },
+                                  {
+                                    text: 'ยืนยันลบ',
+                                    style: 'destructive',
+                                    onPress: () => {
+                                      if (!profile?.id) return;
+                                      cancelOrderItem(src.orderId, src.id, profile.id)
+                                        .then(() => { if (shop?.id) fetchOrders(shop.id); })
+                                        .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
+                                    },
+                                  },
+                                ]
+                              );
+                            },
+                          }));
+                          buttons.push({ text: 'ยกเลิก', onPress: () => {} });
+                          Alert.alert(
+                            `ลบ "${itemName}" จากออเดอร์ไหน?`,
+                            `${itemName} มาจาก ${sources.length} ออเดอร์`,
+                            buttons as any
+                          );
+                        }
+                      }}
+                    >
+                      <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {/* Order rows with item details */}
+                {bill.orders.map((order) => {
+                  const orderStatusColor = statusColors[order.status] ?? '#9CA3AF';
+                  const activeItems = (order.items ?? []).filter((i: any) => (i.item_status ?? 'active') === 'active');
+                  return (
+                    <View key={order.id} style={styles.billOrderSection}>
+                      <View style={styles.billOrderCompact}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                          <Text style={styles.billOrderNum}>#{order.order_number}</Text>
+                          <View style={[styles.orderStatusPill, { backgroundColor: orderStatusColor }]}>
+                            <Text style={styles.orderStatusPillText}>
+                              {statusLabels[order.status] ?? order.status}
+                            </Text>
+                          </View>
+                          <Text style={styles.billOrderPrice}>฿{(order.total_amount ?? 0).toLocaleString('th-TH')}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.billCancelBtn}
+                          onPress={() => {
+                            const isCooked = order.status === 'preparing' || order.status === 'ready';
+                            const warning = isCooked ? '\n⚠️ อาหารกำลังทำ/ทำเสร็จแล้ว' : '';
+                            Alert.alert(
+                              `ยกเลิกออเดอร์ #${order.order_number}`,
+                              `ยกเลิกทั้งออเดอร์ (${activeItems.length} รายการ ฿${(order.total_amount ?? 0).toFixed(0)})?${warning}`,
+                              [
+                                { text: 'ไม่ยกเลิก', style: 'cancel' },
+                                {
+                                  text: 'ยืนยันยกเลิก',
+                                  style: 'destructive',
+                                  onPress: () => {
+                                    if (!profile?.id) return;
+                                    cancelOrder(order.id, profile.id)
+                                      .then(() => { if (shop?.id) fetchOrders(shop.id); })
+                                      .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
+                                  },
+                                },
+                              ]
+                            );
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                      {/* Item details per order (merged by product) */}
+                      {(() => {
+                        const merged: Record<string, { name: string; qty: number; itemIds: string[] }> = {};
+                        activeItems.forEach((item: any) => {
+                          const pid = item.product_id ?? item.id;
+                          const name = item.product?.name ?? 'สินค้า';
+                          if (merged[pid]) {
+                            merged[pid].qty += item.quantity;
+                            merged[pid].itemIds.push(item.id);
+                          } else {
+                            merged[pid] = { name, qty: item.quantity, itemIds: [item.id] };
+                          }
+                        });
+                        return Object.entries(merged).map(([pid, { name, qty, itemIds }]) => (
+                          <View key={pid} style={styles.billOrderItemRow}>
+                            <Text style={styles.billOrderItemName} numberOfLines={1}>{name}</Text>
+                            <Text style={styles.billOrderItemQty}>x{qty}</Text>
+                            <TouchableOpacity
+                              style={{ padding: 4, marginLeft: 4 }}
+                              onPress={() => {
+                                Alert.alert(
+                                  `ยกเลิก "${name}"`,
+                                  `ลบ ${name} x${qty} จากออเดอร์ #${order.order_number}?`,
+                                  [
+                                    { text: 'ไม่ลบ', style: 'cancel' },
+                                    {
+                                      text: 'ยืนยันลบ',
+                                      style: 'destructive',
+                                      onPress: async () => {
+                                        if (!profile?.id) return;
+                                        try {
+                                          for (const iid of itemIds) {
+                                            await cancelOrderItem(order.id, iid, profile.id);
+                                          }
+                                          if (shop?.id) fetchOrders(shop.id);
+                                        } catch (err: any) {
+                                          if (shop?.id) fetchOrders(shop.id);
+                                          Alert.alert('ผิดพลาด', err.message);
+                                        }
+                                      },
+                                    },
+                                  ]
+                                );
+                              }}
+                            >
+                              <Ionicons name="close-circle" size={16} color="#EF4444" />
+                            </TouchableOpacity>
+                          </View>
+                        ));
+                      })()}
+                    </View>
+                  );
+                })}
+
+                {/* Total */}
+                <View style={styles.billTotalRow}>
+                  <Text style={styles.billTotalLabel}>ยอดรวม</Text>
+                  <Text style={styles.billTotalAmount}>฿{bill.totalAmount.toFixed(0)}</Text>
+                </View>
+
+                {/* Payment buttons */}
+                <View style={styles.billPayBtns}>
+                  <TouchableOpacity
+                    style={[styles.billPayBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => setBillPayModal({
+                      tableNumber: bill.tableNumber,
+                      orders: bill.orders,
+                      totalAmount: bill.totalAmount,
+                      method: 'qr',
+                      cashInput: '',
+                    })}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                    <Text style={styles.billPayBtnText}>ยืนยันรับโอน</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.billPayBtn, { backgroundColor: '#059669' }]}
+                    onPress={() => setBillPayModal({
+                      tableNumber: bill.tableNumber,
+                      orders: bill.orders,
+                      totalAmount: bill.totalAmount,
+                      method: 'cash',
+                      cashInput: '',
+                    })}
+                  >
+                    <Ionicons name="cash-outline" size={16} color="#fff" />
+                    <Text style={styles.billPayBtnText}>รับเงินสด</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyInlineText}>ไม่มีโต๊ะที่มีออเดอร์ค้างอยู่</Text>
+        )}
+      </ScrollView>
       <OrderDetailModal
         visible={selectedOrder !== null}
         order={selectedOrder}
@@ -1034,23 +997,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
-  // Pending open tables section
-  pendingSection: {
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  pendingSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    marginBottom: 10,
-  },
-  pendingSectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  //
   openDot: {
     width: 10,
     height: 10,
@@ -1075,23 +1022,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: 14,
-    width: 200,
+    width: 220,
     ...shadow.md,
   },
   pendingCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  pendingCardLeft: {
-    flex: 1,
-    gap: 4,
+  pendingTableText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
   },
   pendingOrderNum: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text.primary,
+    color: '#1E293B',
   },
   tableBadge: {
     flexDirection: 'row',
@@ -1110,28 +1058,33 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   pendingTime: {
     fontSize: 11,
-    color: colors.text.light,
+    color: '#64748B',
     textAlign: 'right',
     flexShrink: 0,
     maxWidth: 80,
   },
   pendingCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#E2E8F0',
     paddingTop: 10,
   },
+  pendingCardFooterTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   pendingTotal: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
-    color: colors.primary,
-    flex: 1,
+    color: '#0066CC',
+    flexShrink: 0,
   },
   pendingItemCount: {
     fontSize: 12,
-    color: colors.text.secondary,
+    color: '#64748B',
+    flexShrink: 0,
   },
   addItemsButton: {
     flexDirection: 'row',
@@ -1149,9 +1102,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   kitchenActionButton: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 8,
     alignItems: 'center',
+    width: '100%',
   },
   kitchenActionText: {
     fontSize: 12,
@@ -1170,6 +1124,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#16A34A',
+  },
+  pendingCardPink: {
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1.5,
+    borderColor: '#FDA4AF',
+  },
+  pendingCardYellow: {
+    backgroundColor: '#FEFCE8',
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
   },
   pendingCardCustomer: {
     borderLeftWidth: 3,
@@ -1497,35 +1461,28 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  // Segment control
-  segmentRow: {
+  // Section header
+  sectionHeader: {
     flexDirection: 'row',
-    marginHorizontal: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 12,
-    marginBottom: 8,
-    backgroundColor: colors.borderLight,
-    borderRadius: radius.full,
-    padding: 3,
+    marginBottom: 10,
   },
-  segmentBtn: {
-    flex: 1,
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: radius.full,
+    gap: 8,
   },
-  segmentBtnActive: {
-    backgroundColor: colors.primary,
+  searchIconBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: colors.borderLight,
   },
-  segmentText: {
+  emptyInlineText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.text.secondary,
-  },
-  segmentTextActive: {
-    color: '#FFFFFF',
+    color: colors.text.light,
+    paddingVertical: 12,
   },
   // Table bill cards
   billCard: {
@@ -1555,22 +1512,70 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full,
     overflow: 'hidden',
   },
-  billOrderSection: {
-    marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  billOrderHeader: {
+  billOrderCompact: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
   },
   billOrderNum: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+    color: colors.text.primary,
+  },
+  billOrderPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.primary,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  billOrderSection: {
+    marginBottom: 4,
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  billOrderItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 24,
+    paddingVertical: 2,
+  },
+  billOrderItemName: {
+    fontSize: 13,
     color: colors.text.secondary,
+    flex: 1,
+  },
+  billOrderItemQty: {
+    fontSize: 13,
+    color: colors.text.light,
+    marginLeft: 8,
+  },
+  orderStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  orderStatusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  billCancelAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  billCancelAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#EF4444',
   },
   billCancelBtn: {
     padding: 6,

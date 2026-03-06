@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
-// "โต๊ะสด" merged into orders screen — redirect to avoid empty route
+// Hidden route — redirect to dashboard (first visible tab)
 export default function Index() {
-  return <Redirect href="/(pos)/orders" />;
+  return <Redirect href="/(pos)/dashboard" />;
 }
