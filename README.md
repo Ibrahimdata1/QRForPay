@@ -22,43 +22,58 @@
 ```
 QRForPay/
 ├── app/
-│   ├── _layout.tsx          # Root layout + auth guard
-│   ├── qr-payment.tsx       # QR payment fullscreen modal
+│   ├── _layout.tsx          # Root layout + auth guard + new-order banner
+│   ├── qr-payment.tsx       # QR payment fullscreen modal (staff)
 │   ├── (auth)/
-│   │   └── login.tsx        # หน้า login (Supabase auth)
-│   └── (pos)/
-│       ├── _layout.tsx      # Tab navigator (3 tabs)
-│       ├── index.tsx        # หน้า POS หลัก — เลือกสินค้า
-│       ├── cart.tsx         # ตะกร้า + ชำระเงิน
-│       ├── orders.tsx       # ประวัติออเดอร์
-│       └── products.tsx     # รายการสินค้าทั้งหมด + สต๊อก
+│   │   └── login.tsx        # หน้า login (email/password + Google OAuth)
+│   ├── (pos)/               # Staff screens — ต้อง login
+│   │   ├── _layout.tsx      # Tab navigator (5 tabs) + realtime subscription
+│   │   ├── index.tsx        # Hidden route (href: null)
+│   │   ├── dashboard.tsx    # สรุปยอดขาย + กราฟ
+│   │   ├── orders.tsx       # ออเดอร์ (active tab + history tab) + บิลรวมโต๊ะ
+│   │   ├── products.tsx     # จัดการสินค้า + upload รูป
+│   │   ├── tables.tsx       # Grid โต๊ะสด (color-coded by status) + QR ต่อโต๊ะ
+│   │   ├── settings.tsx     # ตั้งค่าร้าน, ทีมงาน, dark/light mode
+│   │   ├── cart.tsx         # ตะกร้า + ชำระเงิน (hidden tab)
+│   │   └── inventory.tsx    # สต๊อกวัตถุดิบ (hidden tab)
+│   └── (customer)/          # Customer self-order — ไม่ต้อง login
+│       ├── _layout.tsx      # ErrorBoundary เท่านั้น
+│       └── customer.tsx     # เมนู → ตะกร้า → ชำระ QR  (URL: /customer)
 ├── components/
 │   ├── ProductCard.tsx
 │   ├── CartItem.tsx
 │   ├── QRPaymentModal.tsx
-│   ├── CategoryFilter.tsx
-│   ├── NumPad.tsx
-│   └── OrderSummary.tsx
+│   ├── OrderDetailModal.tsx
+│   └── ProductFormModal.tsx
 ├── src/
 │   ├── lib/
-│   │   ├── supabase.ts      # Supabase client
+│   │   ├── supabase.ts      # Supabase client (+ supabaseCustomer anon)
 │   │   ├── qr.ts            # PromptPay EMV payload + CRC16-CCITT
 │   │   └── receipt.ts       # Receipt utilities
 │   ├── store/
-│   │   ├── authStore.ts     # User / Shop session
-│   │   ├── cartStore.ts     # ตะกร้า (persisted)
+│   │   ├── authStore.ts     # User / Shop / Team / PendingUsers session
+│   │   ├── cartStore.ts     # ตะกร้า (persisted) + resumeOrder
 │   │   ├── productStore.ts  # Products + Categories
-│   │   └── orderStore.ts    # Orders + Payments + Realtime
+│   │   ├── orderStore.ts    # Orders + Payments + Realtime + History
+│   │   └── ingredientStore.ts # วัตถุดิบ + สต๊อก
 │   └── types/
 │       ├── index.ts         # Business types
 │       └── database.ts      # Supabase DB types
 ├── constants/
-│   ├── colors.ts            # Thai POS color scheme
-│   └── config.ts            # Supabase URL, PromptPay ID, tax rate
+│   ├── colors.ts            # Static color palette
+│   ├── ThemeContext.tsx     # Light/Dark theme + useTheme()
+│   ├── theme.ts             # Design tokens (shadow, radius, space)
+│   └── config.ts            # tax rate
 ├── supabase/
-│   ├── schema.sql           # DDL — 7 tables
+│   ├── schema.sql           # DDL — 10 tables
 │   ├── rls_policies.sql     # Row Level Security policies
-│   └── seed.sql             # ข้อมูลตัวอย่าง
+│   ├── seed.sql             # ข้อมูลตัวอย่าง
+│   ├── functions/
+│   │   └── notify-payment/  # Edge Function: push notification เมื่อรับโอน
+│   └── migrations/          # Migration files (ตามลำดับ timestamp)
+├── docs/
+│   ├── DEV_GUIDE.md         # คู่มือนักพัฒนาฉบับเต็ม
+│   └── CUSTOMER_GUIDE.md    # คู่มือสำหรับลูกค้า/ร้านค้า
 └── __tests__/
     ├── cart.test.ts
     ├── qr.test.ts
@@ -79,12 +94,13 @@ shops ──< orders ──< order_items >── products
               └──1 payments (payments.order_id UNIQUE)
 ```
 
-**7 tables:** `shops`, `profiles`, `categories`, `products`, `orders`, `order_items`, `payments`
+**10 tables:** `shops`, `profiles`, `categories`, `products`, `orders`, `order_items`, `payments`, `ingredients`, `stock_movements`, `recipes`
 
 - PKs ทุกตารางเป็น UUID
 - RLS เปิดทุกตาราง — แยกข้อมูลตาม `shop_id`
 - Helper functions: `get_my_shop_id()`, `get_my_role()`
 - Owners: CRUD ทุกอย่าง | Cashiers: SELECT + INSERT/UPDATE orders & payments
+- Super Admin: approve ร้านใหม่, ดู pending users (ไม่ผูกกับ shop_id)
 
 ---
 
@@ -108,15 +124,26 @@ EXPO_PUBLIC_PROMPTPAY_ID=0812345678
 
 ### 3. รัน Supabase migrations
 
-ใน Supabase Dashboard → SQL Editor รันตามลำดับ:
+```bash
+supabase db push   # push migrations ทั้งหมดขึ้น remote
+```
 
+หรือรันใน Supabase Dashboard → SQL Editor ตามลำดับ:
 ```
 1. supabase/schema.sql
 2. supabase/rls_policies.sql
-3. supabase/seed.sql
+3. supabase/migrations/ (เรียงตาม timestamp)
+4. supabase/seed.sql
 ```
 
-### 4. รัน app
+### 4. Deploy Edge Function (push notifications)
+
+```bash
+supabase functions deploy notify-payment --project-ref <ref>
+supabase secrets set WEBHOOK_SECRET=<random-hex-64> --project-ref <ref>
+```
+
+### 5. รัน app
 
 ```bash
 npx expo start
@@ -159,8 +186,10 @@ Cart → [ชำระ QR] → createOrder() → insert orders + order_items + p
 
 | Role | สิทธิ์ |
 |------|--------|
-| `owner` | CRUD ทุกอย่างในร้านตัวเอง |
+| `super_admin` | Approve ร้านค้าใหม่, ดู pending users ทุกร้าน |
+| `owner` | CRUD ทุกอย่างในร้านตัวเอง, จัดการทีมงาน |
 | `cashier` | ดูสินค้า/หมวดหมู่ + สร้าง/อัพเดตออเดอร์ & payments |
+| (pending) | บัญชี Google OAuth ที่ยังรอ approve จาก super_admin |
 
 ---
 
@@ -169,11 +198,27 @@ Cart → [ชำระ QR] → createOrder() → insert orders + order_items + p
 ```bash
 npx jest          # รันครั้งเดียว
 npm test          # watch mode
+npx jest --coverage  # ดู coverage report
 ```
 
-- 43 unit tests ใน 4 ไฟล์
+- Unit tests: cart, qr, order, products, auth, ingredient, e2e_payment_flow
 - Coverage target: 70% branches, 80% functions/lines
 - ดูรายละเอียด: [`__tests__/TEST_PLAN.md`](./__tests__/TEST_PLAN.md)
+
+## Push Notifications
+
+เมื่อลูกค้าชำระเงินสำเร็จ (auto detect) พนักงานทุกคนในร้านจะได้รับ push notification ผ่าน Expo:
+
+```
+payment.status = 'success' (auto)
+    → DB trigger notify_payment_webhook()
+    → Edge Function notify-payment
+    → Expo Push API
+    → พนักงานทุกคนในร้าน
+```
+
+- Webhook secret หมุนผ่าน `supabase secrets set WEBHOOK_SECRET=<new>` — **ไม่ commit secret ลง git เด็ดขาด**
+- `profiles.push_token` เก็บ Expo push token (ลงทะเบียนอัตโนมัติหลัง login)
 
 ---
 

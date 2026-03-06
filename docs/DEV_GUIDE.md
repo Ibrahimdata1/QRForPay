@@ -140,7 +140,7 @@ app/(pos)/orders.tsx           →  /orders     (tab: ออเดอร์)
 app/(pos)/products.tsx         →  /products   (tab: สินค้า)
 app/(pos)/tables.tsx           →  /tables     (tab: โต๊ะ)
 app/(pos)/settings.tsx         →  /settings   (tab: ตั้งค่า)
-app/(pos)/index.tsx            →  /           (hidden — redirect ไป /dashboard)
+app/(pos)/index.tsx            →  /           (hidden — href: null, renders empty View)
 app/(pos)/cart.tsx             →  /cart       (hidden — modal จาก POS)
 app/(customer)/customer.tsx    →  /customer   (ลูกค้าสแกน QR เปิดที่นี่)
 app/qr-payment.tsx             →  /qr-payment (fullScreenModal)
@@ -254,38 +254,32 @@ shops.table_count          -- จำนวนโต๊ะ (เจ้าของ
 ### Migrations ทั้งหมด (ตามลำดับ)
 
 ```bash
-# 1. Base schema
-psql $DB_URL -f supabase/schema.sql
+# push ทั้งหมดด้วยคำสั่งเดียว (recommended)
+supabase db push
 
-# 2. Customer ordering support (anon RLS, order_source, etc.)
-supabase/migrations/20260304120000_customer_ordering.sql
-
-# 3. Table monitor setup (payment_overrides, constraints)
-supabase/migrations/20260305000000_table_monitor_setup.sql
-
-# 4. Anon cancel order permission
-supabase/migrations/20260305120000_anon_cancel_order.sql
-
-# 5. RPC: get_order_for_customer (SECURITY DEFINER)
-supabase/migrations/20260306100000_customer_order_rpc.sql
-
-# 6. RPC: get_order_items_for_customer (SECURITY DEFINER)
-supabase/migrations/20260306110000_customer_order_items_rpc.sql
-
-# 7. shops.table_count column
-supabase/migrations/20260306200000_add_table_count.sql
-
-# 8. Enable Supabase Realtime for orders + payments tables
-supabase/migrations/20260306300000_enable_realtime.sql
-
-# 9. RPC: get_table_combined_view (combined bill for customer web)
-supabase/migrations/20260306190000_get_table_combined_view.sql
-
-# 10. Allow cashier to confirm payments (remove WITH CHECK restriction)
-supabase/migrations/20260307_allow_cashier_complete_payment.sql
+# หรือดูสถานะ migration แต่ละ version
+supabase migration list
 ```
 
-> **⚠️ สำคัญมาก**: Migration #8 (`enable_realtime`) ต้อง apply ก่อน Realtime จะทำงาน
+| # | Timestamp | ชื่อ / หมายเหตุ |
+|---|-----------|----------------|
+| 1 | schema.sql | Base schema — 10 tables |
+| 2 | 20260304120000 | customer_ordering — anon RLS, order_source, table_number |
+| 3 | 20260305000000 | table_monitor_setup — payment_overrides, constraints |
+| 4 | 20260305120000 | anon_cancel_order — anon UPDATE order to cancelled |
+| 5 | 20260306100000 | customer_order_rpc — get_order_for_customer (SECURITY DEFINER) |
+| 6 | 20260306110000 | customer_order_items_rpc — get_order_items_for_customer |
+| 7 | 20260306190000 | get_table_combined_view — combined bill RPC for customer web |
+| 8 | 20260306200000 | add_table_count — shops.table_count column |
+| 9 | 20260306300000 | **enable_realtime** — ALTER PUBLICATION (ต้อง apply ก่อน Realtime ทำงาน!) |
+| 10 | 20260307 | allow_cashier_complete_payment — RLS ให้ cashier confirm payment |
+| 11 | 20260307000000–000003 | super_admin setup, Google OAuth trigger, pending users RPC |
+| 12 | 20260307110000 | cashier_payment_rls — tighten cashier payment policy |
+| 13 | 20260307120000 | order_history — fetchOrderHistory + confirmation badges |
+| 14 | 20260307130000 | **security_fixes** — P1-1/P1-2/P2-2: tighten anon RLS + customer_add_items + input guard |
+| 15 | 20260307140000 | rotate_webhook_secret — บันทึกการหมุน secret (P1-3) |
+
+> **⚠️ สำคัญมาก**: Migration #9 (`enable_realtime`) ต้อง apply ก่อน Realtime จะทำงาน
 > ถ้าข้าม migration นี้ การ subscribe จะไม่ได้รับ event เลย แม้โค้ดจะถูกต้อง
 
 ---
@@ -749,13 +743,32 @@ jest.mock('../src/lib/supabase', () => ({
 ## คำสั่ง Supabase ที่ใช้บ่อย
 
 ```bash
-supabase db push                          # push migration ขึ้น production
-supabase migration list                   # ดูว่า migration ไหน applied แล้ว
-supabase functions deploy notify-payment  # deploy Edge Function
-supabase functions logs notify-payment    # ดู log ของ Edge Function
-supabase secrets list                     # ดู environment variables ของ Edge Function
-supabase secrets set KEY=value            # ตั้ง environment variable
+supabase db push                                        # push migration ขึ้น production
+supabase migration list                                 # ดูว่า migration ไหน applied แล้ว
+supabase migration repair --status applied <timestamp>  # mark migration ว่า applied (ถ้า fail)
+supabase functions deploy notify-payment --project-ref <ref>  # deploy Edge Function
+supabase functions logs notify-payment                  # ดู log ของ Edge Function
+supabase secrets list --project-ref <ref>               # ดู environment variables
+supabase secrets set WEBHOOK_SECRET=<hex> --project-ref <ref>  # หมุน webhook secret
 ```
+
+### การหมุน Webhook Secret (P1-3 Security)
+
+ถ้าต้องหมุน secret ใหม่:
+
+```bash
+# 1. สร้าง secret ใหม่
+openssl rand -hex 32
+
+# 2. อัปเดต Edge Function secret
+supabase secrets set WEBHOOK_SECRET=<new_secret> --project-ref <ref>
+
+# 3. อัปเดต trigger function ใน DB (ผ่าน Supabase Management API หรือ SQL Editor)
+# ดู notify_payment_webhook() ใน Database → Functions
+# เปลี่ยน 'x-supabase-signature' header value เป็น secret ใหม่
+```
+
+> **⚠️ ห้าม hardcode secret ใน migration file** — ใช้ Management API อัปเดต trigger โดยตรง
 
 ---
 
@@ -844,8 +857,21 @@ const formatDate = (dateStr: string) => {
 
 ### ห้ามทำสิ่งเหล่านี้
 - ❌ ใส่ service role key ใน client code (ใช้ใน Edge Function เท่านั้น)
-- ❌ Commit ไฟล์ `.env` ขึ้น Git
+- ❌ Commit ไฟล์ `.env` หรือ secret ใดๆ ขึ้น Git
 - ❌ ทำ RLS policy แบบ UPDATE โดยไม่มี `WITH CHECK`
+- ❌ ใช้ string equality ตรวจ signature — ต้องใช้ `crypto.subtle.timingSafeEqual()`
+- ❌ `console.log()` ข้อมูล user/profile ใน production code (ห่อด้วย `if (__DEV__)`)
+
+### Security Fixes ที่ Apply แล้ว (2026-03-07)
+
+| # | ประเภท | รายละเอียด |
+|---|--------|-----------|
+| P1-1 | RLS | `anon_read_own_order` policy ต้องมี `shop_id IS NOT NULL` |
+| P1-2 | RPC | `customer_add_items` ต้องรับ `p_shop_id` และ verify ก่อน insert |
+| P1-3 | Secret | Webhook secret เก่าอยู่ใน git history — หมุนแล้วด้วย Management API |
+| P1-4 | Edge Fn | `notify-payment` ใช้ `timingSafeEqual` แทน `!==` ป้องกัน timing attack |
+| P2-2 | Input | `get_table_combined_view` validate `length(p_table_number) <= 50` |
+| P2-3 | Logging | ลบ `console.log(JSON.stringify(data))` ที่ leak PII ใน fetchPendingUsers |
 
 ### WITH CHECK คืออะไร ทำไมสำคัญ?
 ```sql
