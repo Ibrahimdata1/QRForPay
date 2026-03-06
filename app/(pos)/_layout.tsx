@@ -14,14 +14,17 @@ export default function POSLayout() {
   const shop = useAuthStore((s) => s.shop);
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  const addNewOrderIds = useOrderStore((s) => s.addNewOrderIds);
 
   const [newOrderAlert, setNewOrderAlert] = useState<{ orderNum: number; tableNum?: number } | null>(null);
   const knownOrderIds = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
   const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Always-on realtime subscription (layout stays mounted on all tabs)
+  // Initial fetch + always-on realtime subscription (layout stays mounted on all tabs)
   useEffect(() => {
     if (!shop?.id) return;
+    fetchOrders(shop.id); // initial fetch to populate knownOrderIds
     const channel = supabase
       .channel('pos-layout-orders')
       .on(
@@ -36,10 +39,16 @@ export default function POSLayout() {
   // Detect new pending orders and alert
   useEffect(() => {
     if (orders.length === 0) return;
+    // First load: just register known IDs, no alert
+    if (!initializedRef.current) {
+      orders.forEach((o) => knownOrderIds.current.add(o.id));
+      initializedRef.current = true;
+      return;
+    }
     const newPending = orders.filter(
       (o) => o.status === 'pending' && !knownOrderIds.current.has(o.id)
     );
-    if (newPending.length > 0 && knownOrderIds.current.size > 0) {
+    if (newPending.length > 0) {
       Vibration.vibrate([0, 400, 150, 400]);
       const latest = newPending[newPending.length - 1];
       setNewOrderAlert({
@@ -47,7 +56,9 @@ export default function POSLayout() {
         tableNum: (latest as any).table_number ?? undefined,
       });
       if (alertTimer.current) clearTimeout(alertTimer.current);
-      alertTimer.current = setTimeout(() => setNewOrderAlert(null), 5000);
+      alertTimer.current = setTimeout(() => setNewOrderAlert(null), 6000);
+      // Track new order IDs in store so orders screen can highlight them
+      addNewOrderIds(newPending.map((o) => o.id));
     }
     orders.forEach((o) => knownOrderIds.current.add(o.id));
   }, [orders]);

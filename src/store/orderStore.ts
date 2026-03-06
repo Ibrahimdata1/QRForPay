@@ -10,6 +10,9 @@ interface OrderState {
   currentOrder: OrderWithItems | null
   isLoading: boolean
   fetchError: string | null
+  newOrderIds: string[]
+  addNewOrderIds: (ids: string[]) => void
+  clearNewOrderIds: () => void
 
   createOrder: (
     shopId: string,
@@ -41,6 +44,13 @@ export const useOrderStore = create<OrderState>()(
     currentOrder: null,
     isLoading: false,
     fetchError: null,
+    newOrderIds: [],
+    addNewOrderIds: (ids: string[]) => {
+      set((state) => { state.newOrderIds = [...new Set([...state.newOrderIds, ...ids])] })
+    },
+    clearNewOrderIds: () => {
+      set((state) => { state.newOrderIds = [] })
+    },
 
     createOrder: async (
       shopId: string,

@@ -60,6 +60,8 @@ export default function OrdersScreen() {
   const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
   const isLoading = useOrderStore((s) => s.isLoading);
   const fetchError = useOrderStore((s) => s.fetchError);
+  const newOrderIds = useOrderStore((s) => s.newOrderIds);
+  const clearNewOrderIds = useOrderStore((s) => s.clearNewOrderIds);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
@@ -72,6 +74,14 @@ export default function OrdersScreen() {
       }
     }, [shop?.id])
   );
+
+  // Auto-clear new order highlights after 8 seconds
+  useEffect(() => {
+    if (newOrderIds.length > 0) {
+      const timer = setTimeout(clearNewOrderIds, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [newOrderIds]);
 
   // Keep selectedOrder in sync with store so the modal refreshes after cancel/update
   useEffect(() => {
@@ -249,11 +259,12 @@ export default function OrdersScreen() {
   const renderPendingCard = (order: OrderWithItems) => {
     const action = getKitchenAction(order);
     const isCustomer = (order as any).order_source === 'customer';
+    const isNew = newOrderIds.includes(order.id);
     const statusColor = statusColors[order.status] ?? '#9CA3AF';
     return (
       <TouchableOpacity
         key={order.id}
-        style={[styles.pendingCard, isCustomer && styles.pendingCardCustomer]}
+        style={[styles.pendingCard, isCustomer && styles.pendingCardCustomer, isNew && styles.newOrderCard]}
         activeOpacity={0.7}
         onPress={() => setSelectedOrder(order)}
       >
@@ -261,6 +272,11 @@ export default function OrdersScreen() {
           <View style={styles.pendingCardLeft}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={styles.pendingOrderNum}>#{order.order_number}</Text>
+              {isNew ? (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>ใหม่!</Text>
+                </View>
+              ) : null}
               {isCustomer ? (
                 <View style={styles.customerBadge}>
                   <Text style={styles.customerBadgeText}>ลูกค้าสั่ง</Text>
@@ -311,15 +327,21 @@ export default function OrdersScreen() {
     const accentColor = statusColors[item.status] || '#9CA3AF';
     const action = getKitchenAction(item);
     const isCustomer = (item as any).order_source === 'customer';
+    const isNew = newOrderIds.includes(item.id);
     return (
-      <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
+      <TouchableOpacity style={[styles.orderCard, isNew && styles.newOrderCard]} activeOpacity={0.7} onPress={() => setSelectedOrder(item)}>
         {/* Left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+        <View style={[styles.accentBar, { backgroundColor: isNew ? '#DC2626' : accentColor }]} />
 
         <View style={styles.cardBody}>
           <View style={styles.orderHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8, flexWrap: 'wrap' }}>
               <Text style={styles.orderNumber}>#{item.order_number}</Text>
+              {isNew ? (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>ใหม่!</Text>
+                </View>
+              ) : null}
               {item.table_number ? (
                 <View style={styles.tableTagSmall}>
                   <Text style={styles.tableTagText}>โต๊ะ {item.table_number}</Text>
@@ -415,7 +437,7 @@ export default function OrdersScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, []);
+  }, [newOrderIds]);
 
   const filteredOrders = orders.filter(order => {
     const matchSearch = searchText === '' ||
@@ -1055,6 +1077,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   payConfirmText: {
     fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  newOrderCard: {
+    borderWidth: 2,
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
+  },
+  newBadge: {
+    backgroundColor: '#DC2626',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  newBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
   },
