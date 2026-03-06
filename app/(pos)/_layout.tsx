@@ -1,6 +1,6 @@
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity, Alert, Platform, View, Vibration } from 'react-native';
+import { TouchableOpacity, Alert, Platform, View, Vibration, ActivityIndicator } from 'react-native';
 import { useRef, useEffect } from 'react';
 import { shadow } from '../../constants/theme';
 import { useAuthStore } from '../../src/store/authStore';
@@ -10,6 +10,7 @@ import { useTheme } from '../../constants/ThemeContext';
 
 export default function POSLayout() {
   const { colors } = useTheme();
+  const isInitialized = useAuthStore((s) => s.isInitialized);
   const signOut = useAuthStore((s) => s.signOut);
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
@@ -87,6 +88,15 @@ export default function POSLayout() {
       router.replace('/(auth)/login');
     }
   };
+
+  // Show loading screen until auth initializes to prevent flashing wrong tab content
+  if (!isInitialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>

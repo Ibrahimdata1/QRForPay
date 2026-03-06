@@ -47,8 +47,8 @@ const methodLabels: Record<string, string> = {
 };
 
 export default function OrdersScreen() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
@@ -893,45 +893,82 @@ export default function OrdersScreen() {
         {/* ===== Section 3: ประวัติออเดอร์ ===== */}
         {/* Filters card */}
         <View style={styles.historyFiltersCard}>
-          {/* Date range pills */}
-          <View style={styles.historyFilterGroup}>
-            {([
-              { key: 'today' as const, label: 'วันนี้' },
-              { key: 'yesterday' as const, label: 'เมื่อวาน' },
-              { key: '7days' as const, label: '7 วัน' },
-              { key: '30days' as const, label: '30 วัน' },
-            ]).map(d => (
-              <TouchableOpacity
-                key={d.key}
-                style={[styles.filterPill, historyDateRange === d.key ? styles.filterPillActive : styles.filterPillInactive]}
-                onPress={() => { setHistoryDateRange(d.key); refreshHistory(d.key); }}
-              >
-                <Text style={[styles.filterPillText, historyDateRange === d.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Date range row */}
+          <View style={styles.historyFilterSection}>
+            <View style={styles.historyFilterLabel}>
+              <Ionicons name="calendar-outline" size={12} color={colors.text.light} />
+              <Text style={styles.historyFilterLabelText}>ช่วงเวลา</Text>
+            </View>
+            <View style={styles.historyFilterGroup}>
+              {([
+                { key: 'today' as const, label: 'วันนี้' },
+                { key: 'yesterday' as const, label: 'เมื่อวาน' },
+                { key: '7days' as const, label: '7 วัน' },
+                { key: '30days' as const, label: '30 วัน' },
+              ]).map(d => (
+                <TouchableOpacity
+                  key={d.key}
+                  style={[
+                    styles.filterPill,
+                    historyDateRange === d.key ? styles.filterPillActive : styles.filterPillInactive,
+                  ]}
+                  onPress={() => { setHistoryDateRange(d.key); refreshHistory(d.key); }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[
+                    styles.filterPillText,
+                    historyDateRange === d.key ? styles.filterPillTextActive : styles.filterPillTextInactive,
+                  ]}>
+                    {d.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           <View style={styles.historyFilterDivider} />
 
-          {/* Status filter pills */}
-          <View style={styles.historyFilterGroup}>
-            {([
-              { key: 'all' as const, label: 'ทั้งหมด' },
-              { key: 'completed' as const, label: 'เสร็จสิ้น' },
-              { key: 'cancelled' as const, label: 'ยกเลิก' },
-            ]).map(s => (
-              <TouchableOpacity
-                key={s.key}
-                style={[styles.filterPill, historyStatusFilter === s.key ? styles.filterPillActive : styles.filterPillInactive]}
-                onPress={() => { setHistoryStatusFilter(s.key); refreshHistory(undefined, s.key); }}
-              >
-                <Text style={[styles.filterPillText, historyStatusFilter === s.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Status filter row */}
+          <View style={styles.historyFilterSection}>
+            <View style={styles.historyFilterLabel}>
+              <Ionicons name="filter-outline" size={12} color={colors.text.light} />
+              <Text style={styles.historyFilterLabelText}>สถานะ</Text>
+            </View>
+            <View style={styles.historyFilterGroup}>
+              {([
+                { key: 'all' as const, label: 'ทั้งหมด', icon: 'albums-outline' as const },
+                { key: 'completed' as const, label: 'เสร็จสิ้น', icon: 'checkmark-circle-outline' as const },
+                { key: 'cancelled' as const, label: 'ยกเลิก', icon: 'close-circle-outline' as const },
+              ]).map(s => (
+                <TouchableOpacity
+                  key={s.key}
+                  style={[
+                    styles.filterPill,
+                    historyStatusFilter === s.key ? styles.filterPillActive : styles.filterPillInactive,
+                    s.key === 'cancelled' && historyStatusFilter === s.key && styles.filterPillDanger,
+                  ]}
+                  onPress={() => { setHistoryStatusFilter(s.key); refreshHistory(undefined, s.key); }}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name={s.icon}
+                    size={13}
+                    color={
+                      historyStatusFilter === s.key
+                        ? (s.key === 'cancelled' ? '#FCA5A5' : '#FFFFFF')
+                        : colors.text.light
+                    }
+                  />
+                  <Text style={[
+                    styles.filterPillText,
+                    historyStatusFilter === s.key ? styles.filterPillTextActive : styles.filterPillTextInactive,
+                    s.key === 'cancelled' && historyStatusFilter === s.key && { color: '#FCA5A5' },
+                  ]}>
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
 
@@ -1265,7 +1302,7 @@ export default function OrdersScreen() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1442,44 +1479,71 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   historyFiltersCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: isDark ? '#141417' : colors.surface,
     borderRadius: radius.lg,
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     marginBottom: 12,
-    gap: 10,
+    gap: 0,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: isDark ? '#252528' : colors.borderLight,
+    ...(isDark
+      ? { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 }
+      : shadow.sm),
+  },
+  historyFilterSection: {
+    gap: 8,
+    paddingVertical: 9,
+  },
+  historyFilterLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  historyFilterLabelText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.text.light,
+    letterSpacing: 0.2,
   },
   historyFilterGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   historyFilterDivider: {
     height: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: -12,
+    backgroundColor: isDark ? '#222226' : colors.borderLight,
+    marginHorizontal: -14,
   },
   filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: radius.full,
     borderWidth: 1,
   },
   filterPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: isDark ? '#0D5954' : '#CCEBE8',
+    borderColor: isDark ? '#1A7A74' : '#99D4CF',
+  },
+  filterPillDanger: {
+    backgroundColor: isDark ? '#3B1515' : '#FEF2F2',
+    borderColor: isDark ? '#7F2020' : '#FECACA',
   },
   filterPillInactive: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: isDark ? '#1A1A1E' : colors.surface,
+    borderColor: isDark ? '#2A2A2E' : colors.borderLight,
   },
   filterPillText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0,
   },
   filterPillTextActive: {
-    color: '#FFFFFF',
+    color: isDark ? '#5ECEC8' : '#0F6B65',
   },
   filterPillTextInactive: {
     color: colors.text.secondary,

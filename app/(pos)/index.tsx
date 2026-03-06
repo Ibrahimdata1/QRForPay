@@ -1,6 +1,6 @@
-import { Redirect } from 'expo-router';
+import { View } from 'react-native';
 
-// Hidden route — redirect to dashboard (first visible tab)
+// Hidden route (href: null in layout) — root _layout.tsx handles all auth redirects
 export default function Index() {
-  return <Redirect href="/(pos)/dashboard" />;
+  return <View />;
 }
