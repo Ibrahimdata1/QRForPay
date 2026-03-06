@@ -563,6 +563,21 @@ export default function OrdersScreen() {
     return matchSearch && matchStatus;
   });
 
+  // Guard: super_admin has no shop — show admin empty state
+  if (!shop) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: 12 }]}>
+        <Ionicons name="shield-checkmark-outline" size={56} color={colors.primary} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.primary }}>
+          คุณเป็น System Admin
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', paddingHorizontal: 32 }}>
+          ยังไม่มีร้านค้าที่ผูกกับบัญชีนี้
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading && orders.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>

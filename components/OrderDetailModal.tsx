@@ -13,14 +13,14 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
   preparing: '#8B5CF6',
-  ready: '#059669',
+  ready: '#EA580C',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
 const statusLabels: Record<string, string> = {
   pending: 'รอดำเนินการ',
   preparing: 'กำลังทำ',
-  ready: 'พร้อมเสิร์ฟ',
+  ready: 'เสิร์ฟแล้ว',
   completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิก',
 };
@@ -38,10 +38,11 @@ interface OrderDetailModalProps {
   onPayPending?: (order: OrderWithItems) => void;
   onCancelItem?: (orderId: string, itemId: string, cancelledBy: string) => void;
   onManualConfirm?: (order: OrderWithItems) => void;
+  onServed?: (order: OrderWithItems) => void;
   profileId?: string;
 }
 
-export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending, onCancelItem, onManualConfirm, profileId }: OrderDetailModalProps) {
+export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending, onCancelItem, onManualConfirm, onServed, profileId }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
   const productMap = useMemo(
@@ -298,17 +299,7 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
               <Text style={styles.cancelBtnText}>ยกเลิก</Text>
             </TouchableOpacity>
           )}
-          {order.status === 'pending' && onPayPending && (
-            <TouchableOpacity
-              style={styles.payPendingBtn}
-              onPress={() => { onClose(); onPayPending(order); }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="cash-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.payPendingBtnText}>ชำระเงิน</Text>
-            </TouchableOpacity>
-          )}
-          {(order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') &&
+          {(order.status === 'preparing' || order.status === 'ready') &&
             order.payment?.status !== 'success' &&
             onManualConfirm && (
             <TouchableOpacity
@@ -578,6 +569,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   payPendingBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  servedBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#059669',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  servedBtnText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',

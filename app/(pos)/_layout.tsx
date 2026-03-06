@@ -12,6 +12,8 @@ export default function POSLayout() {
   const { colors } = useTheme();
   const signOut = useAuthStore((s) => s.signOut);
   const shop = useAuthStore((s) => s.shop);
+  const profile = useAuthStore((s) => s.profile);
+  const isSuperAdmin = profile?.role === 'super_admin';
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const addNewOrderIds = useOrderStore((s) => s.addNewOrderIds);
@@ -19,6 +21,15 @@ export default function POSLayout() {
 
   const knownOrderIds = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
+  const superAdminRedirected = useRef(false);
+
+  // Redirect super_admin to settings tab on first mount
+  useEffect(() => {
+    if (isSuperAdmin && !superAdminRedirected.current) {
+      superAdminRedirected.current = true;
+      router.replace('/(pos)/settings');
+    }
+  }, [isSuperAdmin]);
 
   // Initial fetch + always-on realtime subscription (layout stays mounted on all tabs)
   useEffect(() => {
@@ -129,6 +140,7 @@ export default function POSLayout() {
         options={{
           title: 'แดชบอร์ด',
           headerTitle: 'สรุปยอดขาย',
+          href: isSuperAdmin ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
           ),
@@ -149,6 +161,7 @@ export default function POSLayout() {
         options={{
           title: 'สินค้า',
           headerTitle: 'จัดการสินค้า',
+          href: isSuperAdmin ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="grid" size={size} color={color} />
           ),
@@ -159,6 +172,7 @@ export default function POSLayout() {
         options={{
           title: 'โต๊ะ',
           headerTitle: 'จัดการโต๊ะ',
+          href: isSuperAdmin ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="grid-outline" size={size} color={color} />
           ),

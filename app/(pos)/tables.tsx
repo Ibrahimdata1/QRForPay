@@ -338,6 +338,22 @@ export default function TablesScreen() {
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
+
+  // Guard: super_admin has no shop — show admin empty state
+  if (!shop) {
+    return (
+      <View style={styles.centered}>
+        <Ionicons name="shield-checkmark-outline" size={56} color={colors.primary} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.primary, marginTop: 12 }}>
+          คุณเป็น System Admin
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', paddingHorizontal: 32, marginTop: 8 }}>
+          ไปที่ ตั้งค่า เพื่ออนุมัติร้านค้าใหม่
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading && activeOrders.length === 0) {
     return (
       <View style={styles.centered}>

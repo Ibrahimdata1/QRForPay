@@ -58,9 +58,10 @@ export default function ProductsScreen() {
   }, [products, search]);
 
   const getStockColor = (stock: number) => {
-    if (stock === 0) return '#EF4444';
-    if (stock <= 10) return '#F59E0B';
-    return '#10B981';
+    if (stock === 0) return '#EF4444';   // หมด — แดง
+    if (stock <= 5) return '#F59E0B';    // ต่ำมาก — ส้ม
+    if (stock <= 20) return '#3B82F6';   // ปานกลาง — น้ำเงิน
+    return '#6B7280';                    // เยอะ — เทาเป็นกลาง
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
@@ -134,6 +135,21 @@ export default function ProductsScreen() {
       </View>
     );
   };
+
+  // Guard: super_admin has no shop — show admin empty state
+  if (!shop) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: 12 }]}>
+        <Ionicons name="shield-checkmark-outline" size={56} color={colors.primary} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.primary }}>
+          คุณเป็น System Admin
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', paddingHorizontal: 32 }}>
+          ไปที่ ตั้งค่า เพื่ออนุมัติร้านค้าใหม่
+        </Text>
+      </View>
+    );
+  }
 
   if (isLoading && products.length === 0) {
     return (

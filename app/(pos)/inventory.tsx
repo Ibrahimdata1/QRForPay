@@ -44,8 +44,8 @@ const TX_TYPE_COLORS: Record<StockTransaction['transaction_type'], string> = {
 
 function getStockColor(ingredient: Ingredient): string {
   if (ingredient.current_stock <= ingredient.min_threshold) return Colors.danger;
-  if (ingredient.current_stock <= ingredient.min_threshold * 1.2) return Colors.warning;
-  return Colors.success;
+  if (ingredient.current_stock <= ingredient.min_threshold * 1.5) return Colors.warning;
+  return '#3B82F6'; // น้ำเงินกลางๆ — ไม่ใช้เขียวเพื่อไม่ให้เข้าใจผิดว่าสต็อกโอเค
 }
 
 function isExpiringSoon(expiryDate?: string | null): boolean {

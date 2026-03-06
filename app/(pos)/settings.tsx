@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -71,6 +72,17 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (isSuperAdmin) fetchPendingUsers();
   }, [isSuperAdmin]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (isSuperAdmin) await fetchPendingUsers();
+      if (isOwner && shop?.id) await fetchTeam();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const checkDirty = (name: string, ppay: string, tc: string) => {
     setIsDirty(
@@ -225,6 +237,7 @@ export default function SettingsScreen() {
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Shop Settings Section — hidden for super_admin (no shop) */}
         {!isSuperAdmin && <View style={styles.section}>
@@ -414,10 +427,6 @@ export default function SettingsScreen() {
               </View>
             )}
 
-            <TouchableOpacity onPress={fetchPendingUsers} style={styles.refreshRow}>
-              <Ionicons name="refresh-outline" size={14} color={colors.text.light} />
-              <Text style={styles.fieldHint}>รีเฟรชรายการ</Text>
-            </TouchableOpacity>
           </View>
         )}
 

@@ -126,6 +126,21 @@ export default function DashboardScreen() {
     fetchData();
   }, [fetchData]);
 
+  // Guard: super_admin has no shop — show admin empty state
+  if (!shop) {
+    return (
+      <View style={[styles.container, styles.centered, { gap: 12 }]}>
+        <Ionicons name="shield-checkmark-outline" size={56} color={colors.primary} />
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.primary }}>
+          คุณเป็น System Admin
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', paddingHorizontal: 32 }}>
+          ไปที่ ตั้งค่า เพื่ออนุมัติร้านค้าใหม่
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>

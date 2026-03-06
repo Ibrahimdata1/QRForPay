@@ -192,8 +192,32 @@ export const useAuthStore = create<AuthState>()(
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl)
 
         if (result.type === 'success' && result.url) {
-          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url)
-          if (sessionError) throw sessionError
+          // Extract auth code from callback URL
+          // Custom schemes (qrforpay://) may not parse with new URL(), so extract manually
+          const callbackUrl = result.url
+          // Try query params (?code=xxx) and fragment (#code=xxx)
+          const queryStr = callbackUrl.split('?')[1] || ''
+          const fragmentStr = callbackUrl.split('#')[1] || ''
+          const params = new URLSearchParams(queryStr || fragmentStr)
+          const code = params.get('code')
+
+          if (code) {
+            const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code)
+            if (sessionError) throw sessionError
+          } else {
+            // Fragment may contain access_token (implicit flow) — let Supabase handle it
+            const accessToken = params.get('access_token')
+            const refreshToken = params.get('refresh_token')
+            if (accessToken) {
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              })
+              if (sessionError) throw sessionError
+            } else {
+              throw new Error('Google login callback ไม่มี code หรือ token')
+            }
+          }
           // Re-initialize to load profile/shop
           await get().initialize()
         } else {
