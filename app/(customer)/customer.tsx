@@ -99,6 +99,7 @@ export default function CustomerOrderScreen() {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed' | 'expired'>('pending');
   const [qrTimeLeft, setQrTimeLeft] = useState(300); // 5-minute QR countdown
   const [orderStatus, setOrderStatus] = useState<string>('pending'); // kitchen status feedback
+  const [isPlacing, setIsPlacing] = useState(false);
   // ── multi-order tracking (combined table view) ──
   const [tableOrders, setTableOrders] = useState<{ id: string; orderNumber: number; status: string; total: number }[]>([]);
 
@@ -366,6 +367,7 @@ export default function CustomerOrderScreen() {
     const totalSnapshot = cartTotal;
 
     // Always create a new order (each round = separate order for POS alerts)
+    setIsPlacing(true);
     setCart([]);
     setScreen('cart');
 
@@ -444,9 +446,11 @@ export default function CustomerOrderScreen() {
       }]);
 
       // 6. Show success — realtime subscriptions start via useEffect when orderId is set
+      setIsPlacing(false);
       webAlert('สั่งสำเร็จ!', 'รายการของคุณถูกส่งไปยังครัวแล้ว');
 
     } catch (err: any) {
+      setIsPlacing(false);
       // Restore cart so user can retry
       setCart(cartSnapshot);
       webAlert('เกิดข้อผิดพลาด', err?.message ?? 'สั่งอาหารไม่ได้ กรุณาลองใหม่');
@@ -993,6 +997,12 @@ export default function CustomerOrderScreen() {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.cartContent}>
           {confirmedItems.length === 0 && cart.length === 0 ? (
+            isPlacing ? (
+              <View style={[styles.emptyCartContainer, { justifyContent: 'center' }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={[styles.bodyText, { marginTop: 12 }]}>กำลังส่งรายการ...</Text>
+              </View>
+            ) : (
             <View style={styles.emptyCartContainer}>
               <View style={styles.emptyCartIcon}>
                 <Text style={{ fontSize: 48 }}>🛒</Text>
@@ -1007,6 +1017,7 @@ export default function CustomerOrderScreen() {
                 <Text style={styles.emptyCartButtonText}>ดูเมนู</Text>
               </TouchableOpacity>
             </View>
+            )
           ) : (
             <>
               {/* ── Confirmed items grouped by status ── */}
@@ -1275,6 +1286,13 @@ export default function CustomerOrderScreen() {
                 backgroundColor="#FFFFFF"
                 color="#111827"
               />
+            ) : !promptpayId ? (
+              <View style={styles.qrPlaceholder}>
+                <Text style={{ fontSize: 32 }}>⚠️</Text>
+                <Text style={[styles.bodyText, { marginTop: 8, textAlign: 'center' }]}>
+                  ร้านยังไม่ได้ตั้งค่า PromptPay{'\n'}กรุณาชำระเงินกับพนักงาน
+                </Text>
+              </View>
             ) : (
               <View style={styles.qrPlaceholder}>
                 <ActivityIndicator color={Colors.primary} size="large" />
@@ -1368,7 +1386,7 @@ export default function CustomerOrderScreen() {
               <Text style={styles.successOrderNum}>#{orderNumber}</Text>
             </View>
           )}
-          <Text style={styles.successNote}>ออเดอร์ของคุณถูกส่งครัวแล้ว</Text>
+          <Text style={styles.successNote}>ชำระเรียบร้อยแล้ว เจอกันใหม่นะคะ 😊</Text>
           <TouchableOpacity style={styles.successButton} onPress={handleBackToMenu}>
             <Text style={styles.successButtonText}>กลับหน้าเมนู</Text>
           </TouchableOpacity>

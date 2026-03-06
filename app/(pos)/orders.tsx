@@ -108,10 +108,11 @@ export default function OrdersScreen() {
   useFocusEffect(
     useCallback(() => {
       if (shop?.id) {
+        setHistoryOffset(0);
         fetchOrders(shop.id);
         fetchOrderHistory(shop.id, getDateRange(historyDateRange), historyStatusFilter, HISTORY_PAGE_SIZE, 0);
       }
-    }, [shop?.id])
+    }, [shop?.id, historyDateRange, historyStatusFilter, getDateRange])
   );
 
   // Auto-clear new order highlights after 8 seconds
@@ -134,19 +135,7 @@ export default function OrdersScreen() {
     }
   }, [orders]);
 
-  // Realtime: auto-refresh when orders are inserted or updated (e.g. customer places order)
-  useEffect(() => {
-    if (!shop?.id) return;
-    const channel = supabase
-      .channel('orders-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shop.id}` },
-        () => { fetchOrders(shop.id); }
-      )
-      .subscribe();
-    return () => { channel.unsubscribe(); };
-  }, [shop?.id]);
+  // Realtime handled by _layout.tsx (pos-layout-orders) — no duplicate channel needed here.
 
   const handleCancelOrder = (order: OrderWithItems) => {
     Alert.alert(
@@ -902,44 +891,49 @@ export default function OrdersScreen() {
         }
       >
         {/* ===== Section 3: ประวัติออเดอร์ ===== */}
-        {/* Date range pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 8 }}>
-          {([
-            { key: 'today' as const, label: 'วันนี้' },
-            { key: 'yesterday' as const, label: 'เมื่อวาน' },
-            { key: '7days' as const, label: '7 วัน' },
-            { key: '30days' as const, label: '30 วัน' },
-          ]).map(d => (
-            <TouchableOpacity
-              key={d.key}
-              style={[styles.filterPill, historyDateRange === d.key ? styles.filterPillActive : styles.filterPillInactive]}
-              onPress={() => { setHistoryDateRange(d.key); refreshHistory(d.key); }}
-            >
-              <Text style={[styles.filterPillText, historyDateRange === d.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                {d.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Filters card */}
+        <View style={styles.historyFiltersCard}>
+          {/* Date range pills */}
+          <View style={styles.historyFilterGroup}>
+            {([
+              { key: 'today' as const, label: 'วันนี้' },
+              { key: 'yesterday' as const, label: 'เมื่อวาน' },
+              { key: '7days' as const, label: '7 วัน' },
+              { key: '30days' as const, label: '30 วัน' },
+            ]).map(d => (
+              <TouchableOpacity
+                key={d.key}
+                style={[styles.filterPill, historyDateRange === d.key ? styles.filterPillActive : styles.filterPillInactive]}
+                onPress={() => { setHistoryDateRange(d.key); refreshHistory(d.key); }}
+              >
+                <Text style={[styles.filterPillText, historyDateRange === d.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                  {d.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Status filter pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 12 }}>
-          {([
-            { key: 'all' as const, label: 'ทั้งหมด' },
-            { key: 'completed' as const, label: 'เสร็จสิ้น' },
-            { key: 'cancelled' as const, label: 'ยกเลิก' },
-          ]).map(s => (
-            <TouchableOpacity
-              key={s.key}
-              style={[styles.filterPill, historyStatusFilter === s.key ? styles.filterPillActive : styles.filterPillInactive]}
-              onPress={() => { setHistoryStatusFilter(s.key); refreshHistory(undefined, s.key); }}
-            >
-              <Text style={[styles.filterPillText, historyStatusFilter === s.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                {s.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          <View style={styles.historyFilterDivider} />
+
+          {/* Status filter pills */}
+          <View style={styles.historyFilterGroup}>
+            {([
+              { key: 'all' as const, label: 'ทั้งหมด' },
+              { key: 'completed' as const, label: 'เสร็จสิ้น' },
+              { key: 'cancelled' as const, label: 'ยกเลิก' },
+            ]).map(s => (
+              <TouchableOpacity
+                key={s.key}
+                style={[styles.filterPill, historyStatusFilter === s.key ? styles.filterPillActive : styles.filterPillInactive]}
+                onPress={() => { setHistoryStatusFilter(s.key); refreshHistory(undefined, s.key); }}
+              >
+                <Text style={[styles.filterPillText, historyStatusFilter === s.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                  {s.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         {/* Summary bar */}
         {historyOrders.length > 0 && (
@@ -1446,6 +1440,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: 12,
     gap: 8,
     alignItems: 'center',
+  },
+  historyFiltersCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyFilterGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  historyFilterDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: -12,
   },
   filterPill: {
     paddingHorizontal: 14,

@@ -23,7 +23,14 @@ Deno.serve(async (req: Request) => {
       return new Response('misconfigured', { status: 500 })
     }
     const signature = req.headers.get('x-supabase-signature') ?? ''
-    if (signature !== webhookSecret) {
+    // Use constant-time comparison to prevent timing-based attacks
+    const enc = new TextEncoder()
+    const sigBytes = enc.encode(signature)
+    const secretBytes = enc.encode(webhookSecret)
+    const sigValid =
+      sigBytes.length === secretBytes.length &&
+      crypto.subtle.timingSafeEqual(sigBytes, secretBytes)
+    if (!sigValid) {
       return new Response('unauthorized', { status: 401 })
     }
 
