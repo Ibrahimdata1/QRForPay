@@ -542,3 +542,73 @@ describe('OrderStore — table management', () => {
     });
   });
 });
+
+describe('OrderStore — per-item cancellation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupMockChain();
+  });
+
+  test('cancelOrderItem updates item_status to cancelled in DB', async () => {
+    // cancelOrderItem flow (has active items remaining):
+    //   1. update order_items  → .eq('id', itemId)                 → resolves { error: null }
+    //   2. select order_items  → .eq('order_id', orderId)          → resolves { data: allItems }
+    //   3. update orders       → .eq('id', orderId)                → resolves { error: null }
+    //   4. update payments     → .eq('order_id',…).eq('status',…)  → double-eq
+    //      first .eq returns eqChain (so second .eq exists); awaiting eqChain gives eqChain (no .error → no throw)
+
+    const allItems = [
+      { id: 'item-1', item_status: 'cancelled', subtotal: 100 },
+      { id: 'item-2', item_status: 'active', subtotal: 150 },
+    ];
+
+    const eqChain: any = { eq: mockEq, order: mockOrderBy, select: mockSelect, single: mockSingle, limit: mockLimit };
+
+    mockEq
+      .mockResolvedValueOnce({ error: null })                 // (1) item UPDATE .eq resolved
+      .mockResolvedValueOnce({ data: allItems, error: null }) // (2) SELECT .eq resolved
+      .mockResolvedValueOnce({ error: null })                 // (3) orders UPDATE .eq resolved
+      .mockReturnValue(eqChain);                              // (4) payments first .eq → returns chainable eqChain
+
+    const store = useOrderStore.getState();
+    await store.cancelOrderItem('order-1', 'item-1', 'cashier-1');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ item_status: 'cancelled', item_cancelled_by: 'cashier-1' })
+    );
+  });
+
+  test('cancelOrderItem: when all items cancelled, cascades to cancelOrder', async () => {
+    // All items are cancelled after this update
+    const allItems = [
+      { id: 'item-1', item_status: 'cancelled', subtotal: 100 },
+    ];
+
+    const eqChain: any = { eq: mockEq, order: mockOrderBy, select: mockSelect, single: mockSingle, limit: mockLimit };
+
+    // cancelOrder internally calls:
+    //   orders UPDATE .eq(orderId)                     → resolves { error: null }
+    //   payments UPDATE .eq(order_id).eq(status)        → first .eq returns eqChain, second .eq awaited (no .error)
+    mockEq
+      .mockResolvedValueOnce({ error: null })                 // (1) item UPDATE .eq
+      .mockResolvedValueOnce({ data: allItems, error: null }) // (2) SELECT .eq
+      .mockResolvedValueOnce({ error: null })                 // (3) cancelOrder: orders UPDATE .eq
+      .mockReturnValue(eqChain);                              // (4) cancelOrder: payments first .eq → chainable
+
+    const store = useOrderStore.getState();
+    await store.cancelOrderItem('order-1', 'item-1', 'cashier-1');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' })
+    );
+  });
+
+  test('cancelOrderItem: throws when DB update fails', async () => {
+    mockEq.mockResolvedValueOnce({ error: { message: 'item update failed' } });
+
+    const store = useOrderStore.getState();
+    await expect(
+      store.cancelOrderItem('order-1', 'item-1', 'cashier-1')
+    ).rejects.toMatchObject({ message: 'item update failed' });
+  });
+});

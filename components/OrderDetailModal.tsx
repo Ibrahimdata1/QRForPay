@@ -37,10 +37,11 @@ interface OrderDetailModalProps {
   onCancel?: (order: OrderWithItems) => void;
   onPayPending?: (order: OrderWithItems) => void;
   onCancelItem?: (orderId: string, itemId: string, cancelledBy: string) => void;
+  onManualConfirm?: (order: OrderWithItems) => void;
   profileId?: string;
 }
 
-export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending, onCancelItem, profileId }: OrderDetailModalProps) {
+export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPending, onCancelItem, onManualConfirm, profileId }: OrderDetailModalProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const products = useProductStore((s) => s.products);
   const productMap = useMemo(
@@ -148,7 +149,7 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
           </View>
           {order.items?.map((item, idx) => {
             const isCancelled = (item.item_status ?? 'active') === 'cancelled';
-            const productName = productMap[item.product_id] || (item as any).product_name || (item as any).name || `สินค้า #${idx + 1}`;
+            const productName = (item as any).product?.name || productMap[item.product_id] || `สินค้า #${idx + 1}`;
             const cancellerName = item.item_cancelled_by_profile?.full_name ?? null;
             return (
               <View key={item.id ?? idx} style={[styles.itemRow, isCancelled && styles.itemRowCancelled]}>
@@ -188,10 +189,23 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
 
           {/* Summary */}
           <View style={styles.divider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>ยอดรวม</Text>
-            <Text style={styles.summaryValue}>฿{(order.subtotal ?? 0).toFixed(2)}</Text>
-          </View>
+          {cancelledItemCount > 0 && activeTotal !== (order.subtotal ?? 0) ? (
+            <>
+              <View style={styles.summaryRow}>
+                <Text style={[styles.summaryLabel, { textDecorationLine: 'line-through', color: '#9CA3AF' }]}>ยอดรวมเดิม</Text>
+                <Text style={[styles.summaryValue, { textDecorationLine: 'line-through', color: '#9CA3AF' }]}>฿{(order.subtotal ?? 0).toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>ยอดรวม (หลังยกเลิก)</Text>
+                <Text style={styles.summaryValue}>฿{activeTotal.toFixed(2)}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>ยอดรวม</Text>
+              <Text style={styles.summaryValue}>฿{(order.subtotal ?? 0).toFixed(2)}</Text>
+            </View>
+          )}
           {(order.discount_amount ?? 0) > 0 && (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: Colors.danger }]}>ส่วนลด</Text>
@@ -202,7 +216,7 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
           )}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>VAT 7%</Text>
-            <Text style={styles.summaryValue}>฿{(order.tax_amount ?? 0).toFixed(2)}</Text>
+            <Text style={styles.summaryValue}>฿{(activeTotal * (0.07 / 1.07)).toFixed(2)}</Text>
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>รวมทั้งหมด</Text>
@@ -292,6 +306,18 @@ export function OrderDetailModal({ order, visible, onClose, onCancel, onPayPendi
             >
               <Ionicons name="cash-outline" size={18} color="#FFFFFF" />
               <Text style={styles.payPendingBtnText}>ชำระเงิน</Text>
+            </TouchableOpacity>
+          )}
+          {(order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') &&
+            order.payment?.status !== 'success' &&
+            onManualConfirm && (
+            <TouchableOpacity
+              style={styles.manualConfirmBtn}
+              onPress={() => onManualConfirm(order)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.manualConfirmBtnText}>ยืนยันรับเงิน</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
@@ -552,6 +578,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   payPendingBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  manualConfirmBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  manualConfirmBtnText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',

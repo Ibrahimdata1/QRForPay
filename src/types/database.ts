@@ -5,6 +5,7 @@ export interface Shop {
   name: string;
   owner_id: string | null;
   logo_url: string | null;
+  table_count: number;
   created_at: string;
 }
 

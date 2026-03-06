@@ -25,6 +25,7 @@ export default function SettingsScreen() {
 
   const [shopName, setShopName] = useState('');
   const [promptpayId, setPromptpayId] = useState('');
+  const [tableCount, setTableCount] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -33,18 +34,33 @@ export default function SettingsScreen() {
     if (shop) {
       setShopName(shop.name);
       setPromptpayId(shop.promptpay_id);
+      setTableCount(String(shop.table_count ?? 10));
     }
   }, [shop]);
 
-  // Track whether the user has changed anything
+  const checkDirty = (name: string, ppay: string, tc: string) => {
+    setIsDirty(
+      name !== shop?.name ||
+      ppay !== shop?.promptpay_id ||
+      tc !== String(shop?.table_count ?? 10)
+    );
+  };
+
   const handleShopNameChange = (val: string) => {
     setShopName(val);
-    setIsDirty(val !== shop?.name || promptpayId !== shop?.promptpay_id);
+    checkDirty(val, promptpayId, tableCount);
   };
 
   const handlePromptpayChange = (val: string) => {
     setPromptpayId(val);
-    setIsDirty(shopName !== shop?.name || val !== shop?.promptpay_id);
+    checkDirty(shopName, val, tableCount);
+  };
+
+  const handleTableCountChange = (val: string) => {
+    // Allow only digits
+    const cleaned = val.replace(/[^0-9]/g, '');
+    setTableCount(cleaned);
+    checkDirty(shopName, promptpayId, cleaned);
   };
 
   const handleSave = async () => {
@@ -52,6 +68,7 @@ export default function SettingsScreen() {
 
     const trimmedName = shopName.trim();
     const trimmedPromptpay = promptpayId.trim();
+    const parsedTableCount = parseInt(tableCount, 10);
 
     if (!trimmedName) {
       Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อร้าน');
@@ -61,9 +78,14 @@ export default function SettingsScreen() {
       Alert.alert('ข้อผิดพลาด', 'กรุณากรอก PromptPay ID');
       return;
     }
+    if (isNaN(parsedTableCount) || parsedTableCount < 1 || parsedTableCount > 100) {
+      Alert.alert('ข้อผิดพลาด', 'จำนวนโต๊ะต้องอยู่ระหว่าง 1-100');
+      return;
+    }
 
     setIsSaving(true);
     try {
+      // Save basic shop info
       const { error } = await supabase
         .from('shops')
         .update({ name: trimmedName, promptpay_id: trimmedPromptpay })
@@ -71,7 +93,30 @@ export default function SettingsScreen() {
 
       if (error) throw error;
 
-      Alert.alert('บันทึกแล้ว', 'อัปเดตข้อมูลร้านเรียบร้อยแล้ว');
+      // Save table_count separately (column may not exist if migration not yet applied)
+      let tableCountSaved = false;
+      try {
+        const { error: tcError } = await supabase
+          .from('shops')
+          .update({ table_count: parsedTableCount })
+          .eq('id', shop.id);
+        if (!tcError) tableCountSaved = true;
+      } catch {
+        // table_count column not yet available — ignore
+      }
+
+      // Update local authStore shop
+      useAuthStore.setState((state) => {
+        if (state.shop) {
+          state.shop = {
+            ...state.shop,
+            name: trimmedName,
+            promptpay_id: trimmedPromptpay,
+            ...(tableCountSaved ? { table_count: parsedTableCount } : {}),
+          };
+        }
+      });
+
       setIsDirty(false);
     } catch (err: unknown) {
       const message = (err as any)?.message ?? 'ไม่สามารถบันทึกได้';
@@ -124,6 +169,21 @@ export default function SettingsScreen() {
               returnKeyType="done"
             />
             <Text style={styles.fieldHint}>รองรับ: เบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก</Text>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>จำนวนโต๊ะ</Text>
+            <TextInput
+              style={[styles.input, !isOwner && styles.inputReadOnly]}
+              value={tableCount}
+              onChangeText={handleTableCountChange}
+              placeholder="10"
+              placeholderTextColor={Colors.text.light}
+              editable={isOwner}
+              keyboardType="number-pad"
+              returnKeyType="done"
+            />
+            <Text style={styles.fieldHint}>ตั้งจำนวนโต๊ะในร้าน (1-100) สำหรับหน้าจัดการโต๊ะ</Text>
           </View>
 
           {!isOwner && (

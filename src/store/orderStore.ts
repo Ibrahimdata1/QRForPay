@@ -370,10 +370,15 @@ export const useOrderStore = create<OrderState>()(
       } else {
         // Recalculate total from active items only
         const newTotal = activeItems.reduce((sum: number, i: any) => sum + Number(i.subtotal), 0)
+        const newTax = newTotal * (0.07 / 1.07)
 
         const { error: orderError } = await supabase
           .from('orders')
-          .update({ total_amount: newTotal })
+          .update({
+            total_amount: newTotal,
+            subtotal: newTotal,
+            tax_amount: newTax,
+          })
           .eq('id', orderId)
 
         if (orderError) throw orderError
@@ -396,12 +401,15 @@ export const useOrderStore = create<OrderState>()(
             item.item_cancelled_by = cancelledBy
             item.item_cancelled_at = now
           }
-          // Recalculate total_amount from active items
+          // Recalculate total_amount, subtotal, tax from active items
           const activeLocal = (order.items ?? []).filter(
             (i) => (i.item_status ?? 'active') === 'active'
           )
           if (activeLocal.length > 0) {
-            order.total_amount = activeLocal.reduce((sum, i) => sum + Number(i.subtotal), 0)
+            const newLocalTotal = activeLocal.reduce((sum, i) => sum + Number(i.subtotal), 0)
+            order.total_amount = newLocalTotal
+            order.subtotal = newLocalTotal
+            order.tax_amount = newLocalTotal * (0.07 / 1.07)
           }
         }
       })
@@ -416,7 +424,7 @@ export const useOrderStore = create<OrderState>()(
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('*, items:order_items(*, item_cancelled_by_profile:profiles!order_items_item_cancelled_by_fkey(full_name)), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)')
+          .select('*, items:order_items(*, product:products(name), item_cancelled_by_profile:profiles!order_items_item_cancelled_by_fkey(full_name)), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)')
           .eq('shop_id', shopId)
           .order('created_at', { ascending: false })
           .limit(limit)

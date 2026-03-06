@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
 import { OrderDetailModal } from '../../components/OrderDetailModal';
 import { Colors } from '../../constants/colors';
+import { supabase } from '../../src/lib/supabase';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
@@ -47,6 +48,7 @@ export default function OrdersScreen() {
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const cancelOrder = useOrderStore((s) => s.cancelOrder);
   const cancelOrderItem = useOrderStore((s) => s.cancelOrderItem);
+  const completeOrder = useOrderStore((s) => s.completeOrder);
   const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
   const isLoading = useOrderStore((s) => s.isLoading);
   const fetchError = useOrderStore((s) => s.fetchError);
@@ -61,6 +63,32 @@ export default function OrdersScreen() {
       }
     }, [shop?.id])
   );
+
+  // Keep selectedOrder in sync with store so the modal refreshes after cancel/update
+  useEffect(() => {
+    if (selectedOrder) {
+      const updated = orders.find((o) => o.id === selectedOrder.id);
+      if (updated && updated !== selectedOrder) {
+        setSelectedOrder(updated);
+      } else if (!updated) {
+        setSelectedOrder(null);
+      }
+    }
+  }, [orders]);
+
+  // Realtime: auto-refresh when orders are inserted or updated (e.g. customer places order)
+  useEffect(() => {
+    if (!shop?.id) return;
+    const channel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shop.id}` },
+        () => { fetchOrders(shop.id); }
+      )
+      .subscribe();
+    return () => { channel.unsubscribe(); };
+  }, [shop?.id]);
 
   const handleCancelOrder = (order: OrderWithItems) => {
     Alert.alert(
@@ -93,6 +121,31 @@ export default function OrdersScreen() {
       .catch((err: any) => {
         Alert.alert('เกิดข้อผิดพลาด', err.message || 'เปลี่ยนสถานะไม่สำเร็จ');
       });
+  };
+
+  const handleManualConfirm = (order: OrderWithItems) => {
+    Alert.alert(
+      'ยืนยันรับเงินแล้ว',
+      `ยืนยันว่าได้รับเงิน ฿${(order.total_amount ?? 0).toFixed(0)} จากออเดอร์ #${order.order_number} แล้ว?\n\nออเดอร์จะถูกปิดเป็น "เสร็จสิ้น"`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'ยืนยันรับเงิน',
+          style: 'default',
+          onPress: () => {
+            if (!profile?.id) return;
+            completeOrder(order.id, { method: order.payment_method || 'qr' }, 'manual', profile.id)
+              .then(() => {
+                setSelectedOrder(null);
+                if (shop?.id) fetchOrders(shop.id);
+              })
+              .catch((err: any) => {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยืนยันชำระเงินไม่สำเร็จ');
+              });
+          },
+        },
+      ]
+    );
   };
 
   const handleAddItemsToOrder = (order: OrderWithItems) => {
@@ -199,7 +252,7 @@ export default function OrdersScreen() {
     );
   };
 
-  const renderOrder = ({ item }: { item: OrderWithItems }) => {
+  const renderOrder = useCallback(({ item }: { item: OrderWithItems }) => {
     const accentColor = statusColors[item.status] || '#9CA3AF';
     const action = getKitchenAction(item);
     const isCustomer = (item as any).order_source === 'customer';
@@ -307,7 +360,7 @@ export default function OrdersScreen() {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, []);
 
   const filteredOrders = orders.filter(order => {
     const matchSearch = searchText === '' ||
@@ -341,6 +394,9 @@ export default function OrdersScreen() {
         contentContainerStyle={styles.listContent}
         onRefresh={() => shop?.id && fetchOrders(shop.id)}
         refreshing={isLoading}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={5}
         ListHeaderComponent={
           <View>
             {/* Active orders section (pending + kitchen workflow) — hide when filtering by completed/cancelled */}
@@ -401,6 +457,7 @@ export default function OrdersScreen() {
         onClose={() => setSelectedOrder(null)}
         onCancel={handleCancelOrder}
         onPayPending={handlePayPendingOrder}
+        onManualConfirm={handleManualConfirm}
         profileId={profile?.id}
         onCancelItem={(orderId, itemId, cancelledBy) => {
           cancelOrderItem(orderId, itemId, cancelledBy)

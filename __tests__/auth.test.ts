@@ -78,6 +78,7 @@ function makeShop(overrides: Partial<Shop> = {}): Shop {
     name: 'Test Shop',
     promptpay_id: '0812345678',
     tax_rate: 0.07,
+    table_count: 10,
     created_at: new Date().toISOString(),
     ...overrides,
   };

@@ -3,6 +3,7 @@ export interface Shop {
   name: string
   promptpay_id: string
   tax_rate: number
+  table_count: number
   address?: string
   phone?: string
   logo_url?: string
