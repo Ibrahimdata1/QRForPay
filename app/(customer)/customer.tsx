@@ -97,6 +97,8 @@ export default function CustomerOrderScreen() {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed' | 'expired'>('pending');
   const [qrTimeLeft, setQrTimeLeft] = useState(300); // 5-minute QR countdown
   const [orderStatus, setOrderStatus] = useState<string>('pending'); // kitchen status feedback
+  // ── multi-order tracking (combined table view) ──
+  const [tableOrders, setTableOrders] = useState<{ id: string; orderNumber: number; status: string; total: number }[]>([]);
 
   // ── dialog helpers — custom styled modal on web, Alert on native ─────────
   function webConfirm(title: string, message: string): Promise<boolean> {
@@ -246,44 +248,47 @@ export default function CustomerOrderScreen() {
 
       setMenuItems(products ?? []);
 
-      // Check if this table already has an active order (prevents duplicate bills)
+      // Check for existing active orders at this table (combined view)
       if (tableNumber) {
         try {
-          const { data: activeRows } = await supabaseCustomer
-            .rpc('get_active_table_order', { p_shop_id: shopId, p_table_number: tableNumber });
-          if (activeRows && activeRows.length > 0) {
-            const activeOrder = activeRows[0];
-            setOrderId(activeOrder.id);
-            setOrderNumber(activeOrder.order_number);
-            if (activeOrder.status) setOrderStatus(activeOrder.status);
-
-            // Privacy (#20): only restore item details if same customer session
-            // Different session = new customer at same table → they see order exists but not item details
-            const isSameSession = !activeOrder.customer_session_id
-              || activeOrder.customer_session_id === customerSessionRef.current;
-
-            if (isSameSession) {
-              try {
-                const { data: existingItems } = await supabaseCustomer
-                  .rpc('get_order_items_for_customer', { p_order_id: activeOrder.id });
-                if (existingItems && existingItems.length > 0) {
-                  const restored: CartEntry[] = existingItems.map((row: any) => ({
-                    item: {
-                      id: row.product_id,
-                      name: row.product_name,
-                      price: Number(row.unit_price),
-                      image_url: row.image_url,
-                      category_id: row.category_id,
-                      is_active: row.is_active,
-                    },
-                    qty: row.quantity,
-                  }));
-                  setConfirmedItems(restored);
-                }
-              } catch {
-                // Non-fatal: items RPC unavailable → confirmed section stays empty
+          const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+            p_shop_id: shopId,
+            p_table_number: tableNumber,
+          });
+          if (rows && rows.length > 0) {
+            // Extract unique orders
+            const orderMap = new Map<string, { id: string; orderNumber: number; status: string; total: number }>();
+            rows.forEach((r: any) => {
+              if (!orderMap.has(r.order_id)) {
+                orderMap.set(r.order_id, {
+                  id: r.order_id,
+                  orderNumber: r.order_number,
+                  status: r.order_status,
+                  total: Number(r.order_total),
+                });
               }
-            }
+            });
+            const allOrders = Array.from(orderMap.values());
+            setTableOrders(allOrders);
+            // Set orderId to latest for backward compat (realtime subs, header badge)
+            const latest = allOrders[allOrders.length - 1];
+            setOrderId(latest.id);
+            setOrderNumber(latest.orderNumber);
+            setOrderStatus(latest.status);
+
+            // Combine all items from all orders
+            const combined: CartEntry[] = rows.map((r: any) => ({
+              item: {
+                id: r.product_id,
+                name: r.product_name,
+                price: Number(r.unit_price),
+                image_url: r.product_image_url,
+                category_id: null,
+                is_active: true,
+              },
+              qty: r.quantity,
+            }));
+            setConfirmedItems(combined);
           }
         } catch {
           // Non-fatal: RPC unavailable → fall through (new order will be created)
@@ -349,38 +354,6 @@ export default function CustomerOrderScreen() {
   const getQty = (itemId: string): number =>
     cart.find((e) => e.item.id === itemId)?.qty ?? 0;
 
-  // ── add items to an existing order (same table, same bill) ────────────────
-  const addToExistingOrder = useCallback(async (existingOrderId: string, cartSnapshot: CartEntry[]) => {
-    const items = cartSnapshot.map((e) => ({
-      product_id: e.item.id,
-      quantity: e.qty,
-      unit_price: e.item.price,
-      subtotal: e.item.price * e.qty,
-    }));
-    const additionalAmount = cartSnapshot.reduce((s, e) => s + e.item.price * e.qty, 0);
-
-    // Optimistic: show added items immediately, restore on failure
-    setConfirmedItems((prev) => [...prev, ...cartSnapshot]);
-    setCart([]);
-    setScreen('cart');
-
-    try {
-      // Pass items as array directly (NOT JSON.stringify) so PostgREST sends as jsonb
-      const { error } = await supabaseCustomer.rpc('customer_add_items', {
-        p_order_id: existingOrderId,
-        p_items: items,
-        p_additional_amount: additionalAmount,
-      });
-      if (error) throw error;
-      webAlert('เพิ่มรายการสำเร็จ!', 'พนักงานได้รับรายการของคุณแล้ว');
-    } catch (err: any) {
-      // Revert: move failed items back to cart
-      setConfirmedItems((prev) => prev.slice(0, prev.length - cartSnapshot.length));
-      setCart(cartSnapshot);
-      webAlert('เกิดข้อผิดพลาด', err?.message ?? 'เพิ่มรายการไม่ได้ กรุณาแจ้งพนักงาน');
-    }
-  }, []);
-
   // ── place order ────────────────────────────────────────────────────────────
   const placeOrder = useCallback(async () => {
     if (cart.length === 0) return;
@@ -388,17 +361,11 @@ export default function CustomerOrderScreen() {
     const cartSnapshot = [...cart];
     const totalSnapshot = cartTotal;
 
-    // ── Case A: table already has an active order → add items to it (no new bill) ──
-    if (orderId) {
-      await addToExistingOrder(orderId, cartSnapshot);
-      return;
-    }
-
-    // ── Case B: no active order → create new order + QR payment ──
-    // Optimistically move cart → confirmedItems so paying screen can display them
-    setConfirmedItems(cartSnapshot);
+    // Always create a new order (each round = separate order for POS alerts)
+    // Optimistically append cart → confirmedItems
+    setConfirmedItems(prev => [...prev, ...cartSnapshot]);
     setCart([]);
-    setScreen('paying');
+    setScreen('cart');
 
     try {
       const taxRate = 0.07;
@@ -445,41 +412,39 @@ export default function CustomerOrderScreen() {
 
       if (itemsErr) throw itemsErr;
 
-      // 3. Generate PromptPay QR payload
-      let payload = '';
-      if (promptpayId && totalAmount > 0) {
-        try {
-          payload = generatePromptPayPayload(promptpayId, totalAmount);
-        } catch {
-          // Non-fatal: show QR with empty payload fallback
-        }
-      }
-      setQrPayload(payload);
-
-      // 4. Insert payment record
+      // 3. Insert payment record (cashier will complete payment via POS)
       const { error: payErr } = await supabaseCustomer
         .from('payments')
         .insert({
           order_id: orderRow.id,
           method: 'qr',
           amount: totalAmount,
-          qr_payload: payload || null,
+          qr_payload: null,
           transaction_ref: generateQRReference(),
           status: 'pending',
         });
 
       if (payErr) throw payErr;
 
-      // 5. Realtime subscriptions start automatically via useEffect when orderId is set
+      // 4. Add to tableOrders list
+      setTableOrders(prev => [...prev, {
+        id: orderRow.id,
+        orderNumber: orderRow.order_number,
+        status: 'pending',
+        total: totalAmount,
+      }]);
+
+      // 5. Show success — realtime subscriptions start via useEffect when orderId is set
+      webAlert('สั่งสำเร็จ!', 'รายการของคุณถูกส่งไปยังครัวแล้ว');
 
     } catch (err: any) {
       // Restore cart from confirmedItems so user can retry
       setCart(cartSnapshot);
-      setConfirmedItems([]);
+      setConfirmedItems(prev => prev.slice(0, prev.length - cartSnapshot.length));
       webAlert('เกิดข้อผิดพลาด', err?.message ?? 'สั่งอาหารไม่ได้ กรุณาลองใหม่');
       setScreen('confirm');
     }
-  }, [cart, cartTotal, orderId, shopId, tableNumber, promptpayId, addToExistingOrder]);
+  }, [cart, cartTotal, shopId, tableNumber, promptpayId]);
 
   // ── show payment screen (from cart, when customer wants to pay) ──────────
   const showPayment = useCallback(() => {
@@ -660,11 +625,22 @@ export default function CustomerOrderScreen() {
           <Text style={styles.appHeaderTable}>โต๊ะ {tableNumber}</Text>
         ) : null}
       </View>
-      {/* Order number badge (only when there's an active order) */}
+      {/* Cart/order button — shows when there's an active order */}
       {orderNumber ? (
-        <View style={styles.orderBadge}>
-          <Text style={styles.orderBadgeText}>#{orderNumber}</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.orderBadge}
+          onPress={() => setScreen('cart')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.orderBadgeIcon}>🛒</Text>
+          {(confirmedItems.length + cart.length) > 0 && (
+            <View style={styles.orderBadgeDot}>
+              <Text style={styles.orderBadgeDotText}>
+                {confirmedItems.reduce((s, e) => s + e.qty, 0) + cart.reduce((s, e) => s + e.qty, 0)}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
       ) : null}
     </View>
   );
@@ -868,7 +844,7 @@ export default function CustomerOrderScreen() {
             <Text style={styles.backButton}>← กลับเมนู</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>ตะกร้าสินค้า</Text>
-          {cart.length > 0 && orderId === null ? (
+          {cart.length > 0 ? (
             <TouchableOpacity onPress={handleClearCart} style={styles.clearCartBtn}>
               <Text style={styles.clearCartText}>ล้างตะกร้า</Text>
             </TouchableOpacity>
@@ -896,14 +872,29 @@ export default function CustomerOrderScreen() {
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionHeaderText}>
                       {orderStatus === 'preparing' ? '🍳 กำลังปรุง...'
+                        : orderStatus === 'ready' ? '🍽️ พร้อมเสิร์ฟแล้ว!'
                         : orderStatus === 'completed' ? '✅ เสร็จแล้ว'
                         : '✓ สั่งแล้ว — รออาหาร'}
                     </Text>
                   </View>
-                  {/* Kitchen status banner (MEDIUM) */}
+                  {tableOrders.length > 1 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, paddingHorizontal: 16 }}>
+                      <Text style={{ fontSize: 13, color: '#6B7280' }}>
+                        รวม {tableOrders.length} ออเดอร์
+                      </Text>
+                    </View>
+                  )}
+                  {/* Kitchen status banner */}
                   {orderStatus === 'preparing' && (
                     <View style={styles.kitchenBanner}>
                       <Text style={styles.kitchenBannerText}>ครัวกำลังเตรียมอาหารของคุณ</Text>
+                    </View>
+                  )}
+                  {orderStatus === 'ready' && (
+                    <View style={[styles.kitchenBanner, styles.kitchenBannerReady]}>
+                      <Text style={[styles.kitchenBannerText, styles.kitchenBannerReadyText]}>
+                        อาหารพร้อมแล้ว!
+                      </Text>
                     </View>
                   )}
                   {confirmedItems.map((entry, idx) => (
@@ -996,18 +987,8 @@ export default function CustomerOrderScreen() {
           )}
         </ScrollView>
 
-        {cart.length > 0 && orderId ? (
-          /* Has existing order + new items → show "เพิ่มรายการ" in orange (#10) */
-          <View style={styles.bottomBar}>
-            <TouchableOpacity
-              style={[styles.primaryButton, styles.addItemsButton]}
-              onPress={() => setScreen('confirm')}
-            >
-              <Text style={styles.primaryButtonText}>+ เพิ่มรายการ — {formatPrice(cartTotal)}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : cart.length > 0 ? (
-          /* New order → "สั่งอาหาร" in primary blue */
+        {cart.length > 0 ? (
+          /* Has items in cart → "สั่งอาหาร" */
           <View style={styles.bottomBar}>
             <TouchableOpacity
               style={styles.primaryButton}
@@ -1016,14 +997,14 @@ export default function CustomerOrderScreen() {
               <Text style={styles.primaryButtonText}>สั่งอาหาร — {formatPrice(cartTotal)}</Text>
             </TouchableOpacity>
           </View>
-        ) : confirmedItems.length > 0 && orderId ? (
-          /* No new items, has confirmed → "ชำระเงิน" in green */
+        ) : confirmedItems.length > 0 ? (
+          /* No new items, has confirmed → "สั่งเพิ่ม" back to menu */
           <View style={styles.bottomBar}>
             <TouchableOpacity
-              style={[styles.primaryButton, styles.payButton]}
-              onPress={showPayment}
+              style={[styles.primaryButton, styles.addItemsButton]}
+              onPress={() => setScreen('menu')}
             >
-              <Text style={styles.primaryButtonText}>ชำระเงิน — {formatPrice(confirmedTotal)}</Text>
+              <Text style={styles.primaryButtonText}>+ สั่งเพิ่ม</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -1074,21 +1055,12 @@ export default function CustomerOrderScreen() {
             ) : null}
           </View>
 
-          {orderId ? (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeText}>
-                รายการนี้จะถูกเพิ่มในบิลโต๊ะ {tableNumber} เดิม{'\n'}
-                การชำระเงินจะทำพร้อมกันเมื่อปิดโต๊ะ
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeText}>
-                หลังยืนยัน คุณจะชำระเงินด้วย QR PromptPay{'\n'}
-                สแกนง่าย ปลอดภัย ผ่านแอปธนาคารทุกแอป
-              </Text>
-            </View>
-          )}
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              หลังยืนยัน รายการจะถูกส่งไปยังครัวทันที{'\n'}
+              ชำระเงินกับพนักงานเมื่อทานเสร็จ
+            </Text>
+          </View>
 
           <View style={styles.noticeBox}>
             <Text style={[styles.noticeText, { color: '#B45309' }]}>
@@ -1100,13 +1072,11 @@ export default function CustomerOrderScreen() {
 
         <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={[styles.primaryButton, orderId ? styles.addItemsButton : undefined]}
+            style={styles.primaryButton}
             onPress={placeOrder}
           >
             <Text style={styles.primaryButtonText}>
-              {orderId
-                ? `ยืนยันเพิ่มรายการ — ${formatPrice(cartTotal)}`
-                : `ยืนยัน & ชำระเงิน — ${formatPrice(cartTotal)}`}
+              {`ยืนยันสั่งอาหาร — ${formatPrice(cartTotal)}`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1871,17 +1841,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text.primary,
   },
-  // order badge in header
+  // order cart button in header
   orderBadge: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.4)',
   },
-  orderBadgeText: {
-    fontSize: 13,
+  orderBadgeIcon: {
+    fontSize: 20,
+  },
+  orderBadgeDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  orderBadgeDotText: {
+    fontSize: 10,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -1919,6 +1906,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#92400E',
+  },
+  kitchenBannerReady: {
+    backgroundColor: '#D1FAE5',
+    borderLeftColor: '#059669',
+  },
+  kitchenBannerReadyText: {
+    color: '#065F46',
   },
   // button variants (#10)
   addItemsButton: {
