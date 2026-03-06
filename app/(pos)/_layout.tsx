@@ -1,7 +1,7 @@
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity, Alert, Platform, View, Text, StyleSheet, Vibration } from 'react-native';
-import { useRef, useState, useEffect } from 'react';
+import { TouchableOpacity, Alert, Platform, View, Vibration } from 'react-native';
+import { useRef, useEffect } from 'react';
 import { shadow } from '../../constants/theme';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOrderStore } from '../../src/store/orderStore';
@@ -15,11 +15,10 @@ export default function POSLayout() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const addNewOrderIds = useOrderStore((s) => s.addNewOrderIds);
+  const setAlertInfo = useOrderStore((s) => s.setAlertInfo);
 
-  const [newOrderAlert, setNewOrderAlert] = useState<{ orderNum: number; tableNum?: number } | null>(null);
   const knownOrderIds = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
-  const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initial fetch + always-on realtime subscription (layout stays mounted on all tabs)
   useEffect(() => {
@@ -51,12 +50,11 @@ export default function POSLayout() {
     if (newPending.length > 0) {
       Vibration.vibrate([0, 400, 150, 400]);
       const latest = newPending[newPending.length - 1];
-      setNewOrderAlert({
+      setAlertInfo({
         orderNum: latest.order_number,
         tableNum: (latest as any).table_number ?? undefined,
       });
-      if (alertTimer.current) clearTimeout(alertTimer.current);
-      alertTimer.current = setTimeout(() => setNewOrderAlert(null), 6000);
+      setTimeout(() => setAlertInfo(null), 6000);
       // Track new order IDs in store so orders screen can highlight them
       addNewOrderIds(newPending.map((o) => o.id));
     }
@@ -191,43 +189,6 @@ export default function POSLayout() {
         }}
       />
     </Tabs>
-    {/* New-order alert banner — floats above tab bar */}
-    {newOrderAlert ? (
-      <TouchableOpacity
-        style={styles.newOrderBanner}
-        activeOpacity={0.85}
-        onPress={() => setNewOrderAlert(null)}
-      >
-        <Ionicons name="notifications" size={18} color="#FFFFFF" />
-        <Text style={styles.newOrderBannerText}>
-          {`ออเดอร์ใหม่ #${newOrderAlert.orderNum}${newOrderAlert.tableNum ? ` โต๊ะ ${newOrderAlert.tableNum}` : ''} เข้ามาแล้ว!`}
-        </Text>
-        <Ionicons name="close" size={16} color="#FFFFFF" />
-      </TouchableOpacity>
-    ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  newOrderBanner: {
-    position: 'absolute',
-    bottom: Platform.OS === 'web' ? 80 : 72,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    zIndex: 999,
-    elevation: 10,
-  },
-  newOrderBannerText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-});

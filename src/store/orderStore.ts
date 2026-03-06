@@ -13,6 +13,8 @@ interface OrderState {
   newOrderIds: string[]
   addNewOrderIds: (ids: string[]) => void
   clearNewOrderIds: () => void
+  alertInfo: { orderNum: number; tableNum?: number } | null
+  setAlertInfo: (info: { orderNum: number; tableNum?: number } | null) => void
 
   createOrder: (
     shopId: string,
@@ -50,6 +52,10 @@ export const useOrderStore = create<OrderState>()(
     },
     clearNewOrderIds: () => {
       set((state) => { state.newOrderIds = [] })
+    },
+    alertInfo: null,
+    setAlertInfo: (info) => {
+      set((state) => { state.alertInfo = info })
     },
 
     createOrder: async (
