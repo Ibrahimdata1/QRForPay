@@ -1,6 +1,6 @@
 import '../global.css';
 import { useEffect } from 'react';
-import { Stack, router, usePathname } from 'expo-router';
+import { Stack, Redirect, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
 import { useAuthStore } from '../src/store/authStore';
@@ -36,37 +36,27 @@ function AppShell() {
 
   const profile = useAuthStore((s) => s.profile);
 
-  useEffect(() => {
-    // Customer self-ordering pages are public — never redirect them.
-    if (isPublicRoute(pathname)) return;
-    if (!isInitialized) return;
-
+  // Compute redirect target (render-based via <Redirect> to avoid timing issues)
+  const isPublic = isPublicRoute(pathname);
+  let redirectTarget: string | null = null;
+  if (!isPublic && isInitialized) {
     if (!user) {
-      router.replace('/(auth)/login');
-      return;
+      redirectTarget = '/(auth)/login';
+    } else if (profile === null || profile.role === null) {
+      redirectTarget = '/(auth)/pending';
+    } else if (profile.role === 'super_admin') {
+      redirectTarget = '/(pos)/settings';
+    } else {
+      redirectTarget = '/(pos)/orders';
     }
+  }
 
-    // Pending: signed in via Google but not yet approved by owner
-    if (profile === null || profile.role === null) {
-      router.replace('/(auth)/pending');
-      return;
-    }
+  // Avoid redirecting if we're already on the target path
+  const alreadyThere = redirectTarget && pathname.includes(redirectTarget.replace('/(pos)', '').replace('/(auth)', ''));
 
-    router.replace('/(pos)');
-  // pathname intentionally excluded — see comment in previous version
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized, user, profile?.role]);
-
-  // Always render the Stack so that:
-  // 1. Public routes (customer QR page) are never blocked by auth loading.
-  // 2. There is no "spinner → Stack" remount that causes a white flash on web.
-  //
-  // Auth-required routes (pos, auth) handle their own loading state via the
-  // redirect above — they will be sent to /(auth)/login before they render.
-  // The Stack's contentStyle provides the background colour so the screen is
-  // never bare-white between route transitions.
   return (
     <>
+      {redirectTarget && !alreadyThere && <Redirect href={redirectTarget as any} />}
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{

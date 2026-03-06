@@ -993,13 +993,18 @@ export default function CustomerOrderScreen() {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.cartContent}>
           {confirmedItems.length === 0 && cart.length === 0 ? (
-            <View style={styles.emptyMenu}>
-              <Text style={styles.bodyText}>ตะกร้าว่างเปล่า</Text>
+            <View style={styles.emptyCartContainer}>
+              <View style={styles.emptyCartIcon}>
+                <Text style={{ fontSize: 48 }}>🛒</Text>
+              </View>
+              <Text style={styles.emptyCartTitle}>ยังไม่มีรายการ</Text>
+              <Text style={styles.emptyCartSub}>เลือกเมนูที่ชอบแล้วเพิ่มลงตะกร้าได้เลย</Text>
               <TouchableOpacity
-                style={[styles.primaryButton, { marginTop: 16 }]}
+                style={styles.emptyCartButton}
                 onPress={() => setScreen('menu')}
+                activeOpacity={0.85}
               >
-                <Text style={styles.primaryButtonText}>กลับเลือกเมนู</Text>
+                <Text style={styles.emptyCartButtonText}>ดูเมนู</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1698,6 +1703,51 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingTop: 60,
+  },
+  emptyCartContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+  },
+  emptyCartIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyCartTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  emptyCartSub: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  emptyCartButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  emptyCartButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   // floating bottom cart bar
   cartBar: {

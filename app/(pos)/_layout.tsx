@@ -21,16 +21,6 @@ export default function POSLayout() {
 
   const knownOrderIds = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
-  const superAdminRedirected = useRef(false);
-
-  // Redirect super_admin to settings tab on first mount
-  useEffect(() => {
-    if (isSuperAdmin && !superAdminRedirected.current) {
-      superAdminRedirected.current = true;
-      router.replace('/(pos)/settings');
-    }
-  }, [isSuperAdmin]);
-
   // Initial fetch + always-on realtime subscription (layout stays mounted on all tabs)
   useEffect(() => {
     if (!shop?.id) return;

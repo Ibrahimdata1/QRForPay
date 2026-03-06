@@ -375,10 +375,12 @@ export default function SettingsScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.approveButton}
+                    style={styles.approvePill}
                     onPress={() => { setApprovingUser(u); setNewShopName(''); setNewPromptpay(''); }}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.approveButtonText}>อนุมัติ</Text>
+                    <Ionicons name="checkmark-circle" size={16} color={colors.text.inverse} />
+                    <Text style={styles.approvePillText}>อนุมัติ</Text>
                   </TouchableOpacity>
                 </View>
               ))
@@ -470,7 +472,7 @@ export default function SettingsScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.approveButton, { marginTop: 12 },
+              style={[styles.saveButton, { marginTop: 12 },
                 (!cashierName.trim() || !cashierEmail.trim() || !cashierPassword.trim() || isCreatingCashier)
                   && styles.saveButtonDisabled]}
               onPress={handleCreateCashier}
@@ -482,7 +484,7 @@ export default function SettingsScreen() {
               ) : (
                 <>
                   <Ionicons name="person-add-outline" size={16} color={colors.text.inverse} />
-                  <Text style={styles.approveButtonText}>สร้างบัญชีพนักงาน</Text>
+                  <Text style={styles.saveButtonText}>สร้างบัญชีพนักงาน</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -778,18 +780,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rolePillSelTextActive: {
     color: colors.text.inverse,
   },
-  approveButton: {
+  approvePill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: colors.secondary,
-    borderRadius: radius.md,
-    height: 44,
-    marginTop: 2,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    ...shadow.sm,
   },
-  approveButtonText: {
-    fontSize: 14,
+  approvePillText: {
+    fontSize: 13,
     fontWeight: '700',
     color: colors.text.inverse,
   },
