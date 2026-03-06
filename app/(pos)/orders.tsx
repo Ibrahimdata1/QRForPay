@@ -66,6 +66,14 @@ export default function OrdersScreen() {
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
   const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
+  const [viewMode, setViewMode] = useState<'kitchen' | 'bills'>('kitchen');
+  const [billPayModal, setBillPayModal] = useState<{
+    tableNumber: string;
+    orders: OrderWithItems[];
+    totalAmount: number;
+    method: 'qr' | 'cash';
+    cashInput: string;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -190,6 +198,76 @@ export default function OrdersScreen() {
     }
   };
 
+  const handleBillPayConfirm = async () => {
+    if (!billPayModal || !profile?.id) return;
+    const { orders: billOrders, method, cashInput, totalAmount } = billPayModal;
+
+    if (method === 'cash') {
+      const received = parseFloat(cashInput) || 0;
+      if (received < totalAmount) {
+        Alert.alert('เงินไม่พอ', `ยอดรวมทั้งโต๊ะ ฿${totalAmount.toFixed(0)}`);
+        return;
+      }
+      const change = received - totalAmount;
+      const staffName = profile.full_name ?? profile.email ?? 'พนักงาน';
+      Alert.alert(
+        'ยืนยันรับเงินสด',
+        `โต๊ะ ${billPayModal.tableNumber}\nรวม ${billOrders.length} ออเดอร์\nยอด ฿${totalAmount.toFixed(0)}\nรับมา ฿${received.toFixed(0)}\nทอน ฿${change.toFixed(0)}\n\nรับเงินโดย: ${staffName}`,
+        [
+          { text: 'ยกเลิก', style: 'cancel' },
+          {
+            text: 'ยืนยัน',
+            onPress: async () => {
+              try {
+                for (const order of billOrders) {
+                  await completeOrder(
+                    order.id,
+                    { method: 'cash', amount: order.total_amount ?? 0, cash_received: received, cash_change: change },
+                    'manual',
+                    profile.id
+                  );
+                }
+                setBillPayModal(null);
+                if (shop?.id) fetchOrders(shop.id);
+              } catch (err: any) {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ชำระเงินไม่สำเร็จ');
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      // QR/transfer - complete all orders
+      const staffName = profile.full_name ?? profile.email ?? 'พนักงาน';
+      Alert.alert(
+        'ยืนยันรับโอน',
+        `โต๊ะ ${billPayModal.tableNumber}\nรวม ${billOrders.length} ออเดอร์\nยอด ฿${totalAmount.toFixed(0)}\n\nรับเงินโดย: ${staffName}`,
+        [
+          { text: 'ยกเลิก', style: 'cancel' },
+          {
+            text: 'ยืนยัน',
+            onPress: async () => {
+              try {
+                for (const order of billOrders) {
+                  await completeOrder(
+                    order.id,
+                    { method: 'qr', amount: order.total_amount ?? 0 },
+                    'manual',
+                    profile.id
+                  );
+                }
+                setBillPayModal(null);
+                if (shop?.id) fetchOrders(shop.id);
+              } catch (err: any) {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ชำระเงินไม่สำเร็จ');
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
   const handleServed = (order: OrderWithItems) => {
     Alert.alert(
       'เสิร์ฟแล้ว',
@@ -244,6 +322,30 @@ export default function OrdersScreen() {
 
   // Keep pendingOrders for the horizontal scroll section (legacy naming used below)
   const pendingOrders = activeOrders;
+
+  // Combined table bills for bills mode
+  const tableBills = useMemo(() => {
+    const activeWithTable = orders.filter(o =>
+      (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready')
+      && o.table_number
+    );
+    const groups: Record<string, OrderWithItems[]> = {};
+    activeWithTable.forEach(o => {
+      const key = o.table_number!;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(o);
+    });
+    return Object.entries(groups)
+      .map(([tableNum, tableOrders]) => ({
+        tableNumber: tableNum,
+        orders: tableOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+        totalAmount: tableOrders.reduce((sum, o) => sum + (o.total_amount ?? 0), 0),
+        allItems: tableOrders.flatMap(o =>
+          (o.items ?? []).filter(i => (i as any).item_status === undefined || (i as any).item_status === 'active')
+        ),
+      }))
+      .sort((a, b) => parseInt(a.tableNumber) - parseInt(b.tableNumber));
+  }, [orders]);
 
   const getKitchenAction = (order: OrderWithItems): { nextStatus: string; label: string; color: string } | null => {
     switch (order.status) {
@@ -465,7 +567,7 @@ export default function OrdersScreen() {
       ) : null}
       <FlatList
         style={{ flex: 1 }}
-        data={filteredOrders}
+        data={viewMode === 'kitchen' ? filteredOrders : []}
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
         contentContainerStyle={styles.listContent}
@@ -476,48 +578,156 @@ export default function OrdersScreen() {
         windowSize={5}
         ListHeaderComponent={
           <View>
-            {/* Active orders section (pending + kitchen workflow) — hide when filtering by completed/cancelled */}
-            {pendingOrders.length > 0 && (statusFilter === 'all' || statusFilter === 'pending' || statusFilter === 'preparing' || statusFilter === 'ready') && (
-              <View style={styles.pendingSection}>
-                <View style={styles.pendingSectionHeader}>
-                  <View style={styles.pendingSectionTitleRow}>
-                    <View style={styles.openDot} />
-                    <Text style={styles.pendingSectionTitle}>ออเดอร์ที่ใช้งานอยู่</Text>
-                  </View>
-                  <Text style={styles.pendingSectionCount}>{pendingOrders.length} รายการ</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
-                  {pendingOrders.map(renderPendingCard)}
-                </ScrollView>
-              </View>
-            )}
+            {/* Segment control: kitchen vs bills */}
+            <View style={styles.segmentRow}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, viewMode === 'kitchen' && styles.segmentBtnActive]}
+                onPress={() => setViewMode('kitchen')}
+              >
+                <Ionicons name="flame-outline" size={16} color={viewMode === 'kitchen' ? '#fff' : colors.text.secondary} />
+                <Text style={[styles.segmentText, viewMode === 'kitchen' && styles.segmentTextActive]}>ครัว</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentBtn, viewMode === 'bills' && styles.segmentBtnActive]}
+                onPress={() => setViewMode('bills')}
+              >
+                <Ionicons name="receipt-outline" size={16} color={viewMode === 'bills' ? '#fff' : colors.text.secondary} />
+                <Text style={[styles.segmentText, viewMode === 'bills' && styles.segmentTextActive]}>
+                  บิลรวมโต๊ะ{tableBills.length > 0 ? ` (${tableBills.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            {/* Search */}
-            <TextInput
-              style={styles.searchInput}
-              placeholder="ค้นหาเลขออเดอร์..."
-              placeholderTextColor={colors.text.light}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {/* Status filter pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRow}>
-              {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(s => (
-                <TouchableOpacity key={s}
-                  style={[styles.filterPill,
-                    statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
-                  onPress={() => setStatusFilter(s)}>
-                  <Text style={[styles.filterPillText,
-                    statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
-                    {s === 'all' ? 'ทั้งหมด' : statusLabels[s] ?? s}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {viewMode === 'kitchen' ? (
+              <>
+                {/* Active orders section (pending + kitchen workflow) — hide when filtering by completed/cancelled */}
+                {pendingOrders.length > 0 && (statusFilter === 'all' || statusFilter === 'pending' || statusFilter === 'preparing' || statusFilter === 'ready') && (
+                  <View style={styles.pendingSection}>
+                    <View style={styles.pendingSectionHeader}>
+                      <View style={styles.pendingSectionTitleRow}>
+                        <View style={styles.openDot} />
+                        <Text style={styles.pendingSectionTitle}>ออเดอร์ที่ใช้งานอยู่</Text>
+                      </View>
+                      <Text style={styles.pendingSectionCount}>{pendingOrders.length} รายการ</Text>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pendingScroll}>
+                      {pendingOrders.map(renderPendingCard)}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Search */}
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="ค้นหาเลขออเดอร์..."
+                  placeholderTextColor={colors.text.light}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {/* Status filter pills */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}>
+                  {(['all', 'pending', 'preparing', 'ready', 'completed', 'cancelled'] as const).map(s => (
+                    <TouchableOpacity key={s}
+                      style={[styles.filterPill,
+                        statusFilter === s ? styles.filterPillActive : styles.filterPillInactive]}
+                      onPress={() => setStatusFilter(s)}>
+                      <Text style={[styles.filterPillText,
+                        statusFilter === s ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                        {s === 'all' ? 'ทั้งหมด' : statusLabels[s] ?? s}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              /* Bills mode: render all table bill cards here */
+              tableBills.length > 0 ? (
+                <View style={{ marginTop: 8 }}>
+                  {tableBills.map((bill) => (
+                    <View key={bill.tableNumber} style={styles.billCard}>
+                      <View style={styles.billHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name="grid-outline" size={18} color={colors.primary} />
+                          <Text style={styles.billTableNum}>โต๊ะ {bill.tableNumber}</Text>
+                        </View>
+                        <Text style={styles.billOrderCount}>{bill.orders.length} ออเดอร์</Text>
+                      </View>
+
+                      {/* Status overview */}
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                        {(['pending', 'preparing', 'ready'] as const).map(st => {
+                          const count = bill.orders.filter(o => o.status === st).length;
+                          if (count === 0) return null;
+                          return (
+                            <View key={st} style={[styles.miniStatusBadge, { backgroundColor: (statusColors[st] ?? '#9CA3AF') + '22' }]}>
+                              <Text style={[styles.miniStatusText, { color: statusColors[st] ?? '#9CA3AF' }]}>
+                                {statusLabels[st]} {count}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      {/* Items list */}
+                      {bill.allItems.map((item, idx) => (
+                        <View key={(item as any).id ?? idx} style={styles.billItemRow}>
+                          <Text style={styles.billItemName} numberOfLines={1}>
+                            {(item as any).product?.name ?? 'สินค้า'}
+                          </Text>
+                          <Text style={styles.billItemQty}>x{item.quantity}</Text>
+                          <Text style={styles.billItemPrice}>฿{(item.subtotal ?? 0).toFixed(0)}</Text>
+                        </View>
+                      ))}
+
+                      {/* Total */}
+                      <View style={styles.billTotalRow}>
+                        <Text style={styles.billTotalLabel}>ยอดรวม</Text>
+                        <Text style={styles.billTotalAmount}>฿{bill.totalAmount.toFixed(0)}</Text>
+                      </View>
+
+                      {/* Payment buttons */}
+                      <View style={styles.billPayBtns}>
+                        <TouchableOpacity
+                          style={[styles.billPayBtn, { backgroundColor: colors.primary }]}
+                          onPress={() => setBillPayModal({
+                            tableNumber: bill.tableNumber,
+                            orders: bill.orders,
+                            totalAmount: bill.totalAmount,
+                            method: 'qr',
+                            cashInput: '',
+                          })}
+                        >
+                          <Ionicons name="phone-portrait-outline" size={16} color="#fff" />
+                          <Text style={styles.billPayBtnText}>ยืนยันรับโอน</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.billPayBtn, { backgroundColor: '#059669' }]}
+                          onPress={() => setBillPayModal({
+                            tableNumber: bill.tableNumber,
+                            orders: bill.orders,
+                            totalAmount: bill.totalAmount,
+                            method: 'cash',
+                            cashInput: '',
+                          })}
+                        >
+                          <Ionicons name="cash-outline" size={16} color="#fff" />
+                          <Text style={styles.billPayBtnText}>รับเงินสด</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.billEmptyContainer}>
+                  <Ionicons name="receipt-outline" size={56} color={colors.text.light} />
+                  <Text style={styles.billEmptyText}>ไม่มีโต๊ะที่มีออเดอร์ค้างอยู่</Text>
+                </View>
+              )
+            )}
           </View>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={viewMode === 'kitchen' ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={64} color={colors.text.light} />
             <Text style={styles.emptyText}>
@@ -526,7 +736,7 @@ export default function OrdersScreen() {
                 : 'ยังไม่มีรายการ'}
             </Text>
           </View>
-        }
+        ) : null}
       />
       <OrderDetailModal
         visible={selectedOrder !== null}
@@ -611,6 +821,79 @@ export default function OrdersScreen() {
                       <Text style={styles.payCancelText}>ยกเลิก</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.payConfirmBtn} onPress={handlePayConfirm}>
+                      <Text style={styles.payConfirmText}>ยืนยันรับเงิน</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Bill payment modal (combined table) */}
+      <Modal visible={!!billPayModal} transparent animationType="fade" onRequestClose={() => setBillPayModal(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={styles.payOverlay} onPress={() => setBillPayModal(null)}>
+            <Pressable style={styles.paySheet} onPress={(e) => e.stopPropagation()}>
+              {billPayModal && (
+                <>
+                  <Text style={styles.paySheetTitle}>ชำระเงินรวมโต๊ะ</Text>
+                  <Text style={styles.paySheetOrder}>โต๊ะ {billPayModal.tableNumber} · {billPayModal.orders.length} ออเดอร์</Text>
+                  <Text style={styles.paySheetTotal}>฿{billPayModal.totalAmount.toFixed(0)}</Text>
+
+                  {/* Method selector */}
+                  <Text style={styles.paySheetLabel}>วิธีชำระเงิน</Text>
+                  <View style={styles.methodRow}>
+                    <TouchableOpacity
+                      style={[styles.methodPill, billPayModal.method === 'qr' && styles.methodPillActive]}
+                      onPress={() => setBillPayModal((p) => p ? { ...p, method: 'qr', cashInput: '' } : p)}
+                    >
+                      <Ionicons name="phone-portrait-outline" size={16} color={billPayModal.method === 'qr' ? '#fff' : colors.text.secondary} />
+                      <Text style={[styles.methodPillText, billPayModal.method === 'qr' && styles.methodPillTextActive]}>โอน/QR</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.methodPill, billPayModal.method === 'cash' && styles.methodPillActive]}
+                      onPress={() => setBillPayModal((p) => p ? { ...p, method: 'cash' } : p)}
+                    >
+                      <Ionicons name="cash-outline" size={16} color={billPayModal.method === 'cash' ? '#fff' : colors.text.secondary} />
+                      <Text style={[styles.methodPillText, billPayModal.method === 'cash' && styles.methodPillTextActive]}>เงินสด</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Cash input */}
+                  {billPayModal.method === 'cash' && (
+                    <View style={styles.cashSection}>
+                      <Text style={styles.paySheetLabel}>รับเงินมา (฿)</Text>
+                      <TextInput
+                        style={styles.cashInput}
+                        value={billPayModal.cashInput}
+                        onChangeText={(v) => setBillPayModal((p) => p ? { ...p, cashInput: v } : p)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor={colors.text.light}
+                        autoFocus
+                      />
+                      {(() => {
+                        const received = parseFloat(billPayModal.cashInput) || 0;
+                        const total = billPayModal.totalAmount;
+                        const change = received - total;
+                        if (received > 0 && change >= 0) return <Text style={styles.changeText}>ทอน ฿{change.toFixed(0)}</Text>;
+                        if (received > 0 && change < 0) return <Text style={styles.shortText}>ขาด ฿{(-change).toFixed(0)}</Text>;
+                        return null;
+                      })()}
+                    </View>
+                  )}
+
+                  <Text style={styles.staffText}>
+                    รับเงินโดย: {profile?.full_name ?? profile?.email ?? 'พนักงาน'}
+                  </Text>
+
+                  <View style={styles.payBtns}>
+                    <TouchableOpacity style={styles.payCancelBtn} onPress={() => setBillPayModal(null)}>
+                      <Text style={styles.payCancelText}>ยกเลิก</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.payConfirmBtn} onPress={handleBillPayConfirm}>
                       <Text style={styles.payConfirmText}>ยืนยันรับเงิน</Text>
                     </TouchableOpacity>
                   </View>
@@ -1095,5 +1378,137 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // Segment control
+  segmentRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.full,
+    padding: 3,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+  },
+  segmentBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+  },
+  // Table bill cards
+  billCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 16,
+    marginBottom: 12,
+    ...shadow.md,
+  },
+  billHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  billTableNum: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  billOrderCount: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    backgroundColor: colors.borderLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  billItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  billItemName: {
+    fontSize: 14,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  billItemQty: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    marginHorizontal: 12,
+  },
+  billItemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.primary,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  billTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1.5,
+    borderTopColor: colors.border,
+  },
+  billTotalLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  billTotalAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.primary,
+    fontVariant: ['tabular-nums'] as any,
+    letterSpacing: -0.5,
+  },
+  billPayBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  billPayBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  billPayBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  billEmptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+  },
+  billEmptyText: {
+    fontSize: 15,
+    color: colors.text.light,
+    marginTop: 12,
   },
 });
