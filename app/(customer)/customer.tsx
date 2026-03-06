@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  Modal,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -78,6 +79,15 @@ export default function CustomerOrderScreen() {
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // ── in-app dialog (replaces window.alert / window.confirm on web) ──────────
+  type DialogState = {
+    type: 'alert' | 'confirm';
+    title: string;
+    message: string;
+    resolve: ((value: boolean) => void) | null;
+  };
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+
   // ── order tracking ──
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
@@ -88,29 +98,64 @@ export default function CustomerOrderScreen() {
   const [qrTimeLeft, setQrTimeLeft] = useState(300); // 5-minute QR countdown
   const [orderStatus, setOrderStatus] = useState<string>('pending'); // kitchen status feedback
 
-  // ── simple confirm / alert helpers ──────────────────────────────────────
-  // On web, use native browser dialog (always works, no render blocking).
-  // On native, use Alert.alert (React Native standard).
+  // ── dialog helpers — custom styled modal on web, Alert on native ─────────
   function webConfirm(title: string, message: string): Promise<boolean> {
     return new Promise((resolve) => {
-      if (Platform.OS === 'web') {
-        resolve(window.confirm(`${title}\n\n${message}`));
-      } else {
+      if (Platform.OS !== 'web') {
         Alert.alert(title, message, [
           { text: 'ยกเลิก', style: 'cancel', onPress: () => resolve(false) },
           { text: 'ยืนยัน', style: 'destructive', onPress: () => resolve(true) },
         ]);
+      } else {
+        setDialog({ type: 'confirm', title, message, resolve });
       }
     });
   }
 
   function webAlert(title: string, message: string): void {
-    if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${message}`);
-    } else {
+    if (Platform.OS !== 'web') {
       Alert.alert(title, message, [{ text: 'รับทราบ' }]);
+    } else {
+      setDialog({ type: 'alert', title, message, resolve: null });
     }
   }
+
+  const dismissDialog = (value: boolean) => {
+    if (dialog?.resolve) dialog.resolve(value);
+    setDialog(null);
+  };
+
+  const renderDialog = () => {
+    if (!dialog) return null;
+    return (
+      <Modal visible transparent animationType="fade" onRequestClose={() => dismissDialog(false)}>
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>{dialog.title}</Text>
+            <Text style={styles.dialogMessage}>{dialog.message}</Text>
+            <View style={styles.dialogActions}>
+              {dialog.type === 'confirm' && (
+                <TouchableOpacity
+                  style={[styles.dialogBtn, styles.dialogBtnSecondary]}
+                  onPress={() => dismissDialog(false)}
+                >
+                  <Text style={styles.dialogBtnSecondaryText}>ยกเลิก</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogBtnPrimary]}
+                onPress={() => dismissDialog(true)}
+              >
+                <Text style={styles.dialogBtnPrimaryText}>
+                  {dialog.type === 'confirm' ? 'ยืนยัน' : 'รับทราบ'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   // customer session stored in memory (no localStorage in RN, but fine for single-page session)
   const customerSessionRef = useRef<string>(
@@ -630,6 +675,7 @@ export default function CustomerOrderScreen() {
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={[styles.bodyText, { marginTop: 12 }]}>กำลังโหลดเมนู...</Text>
+        {renderDialog()}
       </View>
     );
   }
@@ -644,6 +690,7 @@ export default function CustomerOrderScreen() {
         <TouchableOpacity style={styles.primaryButton} onPress={loadMenu}>
           <Text style={styles.primaryButtonText}>ลองใหม่</Text>
         </TouchableOpacity>
+        {renderDialog()}
       </View>
     );
   }
@@ -798,6 +845,7 @@ export default function CustomerOrderScreen() {
           </TouchableOpacity>
         ) : null}
         </View>
+      {renderDialog()}
       </View>
     );
   }
@@ -980,6 +1028,7 @@ export default function CustomerOrderScreen() {
           </View>
         ) : null}
         </View>
+      {renderDialog()}
       </View>
     );
   }
@@ -1062,6 +1111,7 @@ export default function CustomerOrderScreen() {
           </TouchableOpacity>
         </View>
         </View>
+      {renderDialog()}
       </View>
     );
   }
@@ -1156,6 +1206,7 @@ export default function CustomerOrderScreen() {
           </View>
         </ScrollView>
         </View>
+      {renderDialog()}
       </View>
     );
   }
@@ -1193,6 +1244,7 @@ export default function CustomerOrderScreen() {
             <Text style={styles.successButtonText}>กลับหน้าเมนู</Text>
           </TouchableOpacity>
         </View>
+      {renderDialog()}
       </View>
     );
   }
@@ -1205,6 +1257,68 @@ export default function CustomerOrderScreen() {
 const MAX_WIDTH = 480;
 
 const styles = StyleSheet.create({
+  // ── custom dialog overlay ──
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  dialogBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  dialogMessage: {
+    fontSize: 15,
+    color: '#374151',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  dialogBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 12,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  dialogBtnPrimary: {
+    backgroundColor: Colors.primary,
+  },
+  dialogBtnSecondary: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dialogBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  dialogBtnSecondaryText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 15,
+  },
   // ── root wrapper: centers content on wide screens ──
   container: {
     flex: 1,

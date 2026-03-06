@@ -42,7 +42,7 @@ const STATUS_PRIORITY: Record<string, number> = {
 };
 
 const APP_BASE_URL =
-  process.env.EXPO_PUBLIC_APP_BASE_URL ?? 'https://dist-two-rose-32.vercel.app';
+  process.env.EXPO_PUBLIC_APP_BASE_URL ?? 'https://qrforpay.vercel.app';
 
 function buildCustomerUrl(shopId: string, table: string): string {
   return `${APP_BASE_URL}/customer?shop=${encodeURIComponent(shopId)}&table=${encodeURIComponent(table)}`;

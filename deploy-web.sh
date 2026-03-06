@@ -1,10 +1,10 @@
 #!/bin/bash
-# deploy-web.sh — build + fix fonts + deploy to Vercel
+# deploy-web.sh — build + fix fonts + deploy to Vercel + alias qrforpay
 # Usage: bash deploy-web.sh
 set -e
 
 echo "=== 1. Build web ==="
-EXPO_PUBLIC_APP_BASE_URL=https://dist-two-rose-32.vercel.app \
+EXPO_PUBLIC_APP_BASE_URL=https://qrforpay.vercel.app \
   npx expo export -p web
 
 echo "=== 2. Fix: copy icon fonts to _expo/static/fonts/ ==="
@@ -33,5 +33,10 @@ cp vercel.json dist/
 cd dist && npx vercel --prod --yes
 
 echo ""
+echo "=== 5. Add alias: qrforpay.vercel.app ==="
+npx vercel alias qrforpay.vercel.app
+
+echo ""
 echo "=== Done! ==="
-echo "Verify fonts: curl -I https://dist-two-rose-32.vercel.app/_expo/static/fonts/Ionicons.*.ttf"
+echo "Production URL: https://qrforpay.vercel.app"
+echo "Verify fonts: curl -I https://qrforpay.vercel.app/_expo/static/fonts/Ionicons.*.ttf"

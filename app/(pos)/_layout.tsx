@@ -79,16 +79,6 @@ export default function POSLayout() {
         }}
       />
       <Tabs.Screen
-        name="index"
-        options={{
-          title: 'โต๊ะสด',
-          headerTitle: 'ออเดอร์สด',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="restaurant-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="orders"
         options={{
           title: 'ออเดอร์',
@@ -109,12 +99,12 @@ export default function POSLayout() {
         }}
       />
       <Tabs.Screen
-        name="inventory"
+        name="tables"
         options={{
-          title: 'คลัง',
-          headerTitle: 'จัดการวัตถุดิบ',
+          title: 'โต๊ะ',
+          headerTitle: 'จัดการโต๊ะ',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flask-outline" size={size} color={color} />
+            <Ionicons name="grid-outline" size={size} color={color} />
           ),
         }}
       />
@@ -128,16 +118,9 @@ export default function POSLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="tables"
-        options={{
-          title: 'โต๊ะ',
-          headerTitle: 'จัดการโต๊ะ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* Hidden routes — no tab icon */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="inventory" options={{ href: null }} />
       <Tabs.Screen
         name="cart"
         options={{
