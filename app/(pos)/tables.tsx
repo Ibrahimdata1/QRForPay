@@ -1,12 +1,13 @@
 // Visual Table Management — status derived from active orders
 // Colors: 🟢 ว่าง (green) | 🟠 รอทำ (orange/pending) | 🟣 กำลังทำ (purple/preparing) | 🔵 พร้อมเสิร์ฟ (blue/ready)
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -14,6 +15,8 @@ import {
   Modal,
   Share,
   Platform,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,8 +24,9 @@ import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOrderStore } from '../../src/store/orderStore';
-import { Colors } from '../../constants/colors';
+import { shadow, radius } from '../../constants/theme';
 import { OrderWithItems } from '../../src/types';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -30,7 +34,7 @@ const TABLE_STATUS = {
   available: { color: '#059669', bg: '#D1FAE5', label: 'ว่าง', icon: 'checkmark-circle' as const },
   pending: { color: '#F59E0B', bg: '#FEF3C7', label: 'รอทำ', icon: 'time' as const },
   preparing: { color: '#8B5CF6', bg: '#EDE9FE', label: 'กำลังทำ', icon: 'flame' as const },
-  ready: { color: '#0066CC', bg: '#DBEAFE', label: 'พร้อมเสิร์ฟ', icon: 'restaurant' as const },
+  ready: { color: '#EA580C', bg: '#FFEDD5', label: 'เสิร์ฟแล้ว', icon: 'restaurant' as const },
 } as const;
 
 type TableStatus = keyof typeof TABLE_STATUS;
@@ -77,9 +81,11 @@ function deriveTableStatus(orders: OrderWithItems[]): TableStatus {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function TablesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
-  const updateOrderStatus = useOrderStore((s) => s.updateOrderStatus);
   const completeOrder = useOrderStore((s) => s.completeOrder);
 
   const tableCount = shop?.table_count ?? 10;
@@ -91,6 +97,7 @@ export default function TablesScreen() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [movingFromTable, setMovingFromTable] = useState<string | null>(null);
   const [isMoving, setIsMoving] = useState(false);
+  const [cashModal, setCashModal] = useState<{ order: OrderWithItems; cashInput: string } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ── fetch active orders ────────────────────────────────────────────────────
@@ -159,22 +166,8 @@ export default function TablesScreen() {
     return { key: num, label: num, orders, status: deriveTableStatus(orders) };
   });
 
-  // ── extra tables (non-numeric or out-of-range) ─────────────────────────────
-  const extraTables = Object.entries(ordersByTable)
-    .filter(([key]) => {
-      if (key === '__none__') return true;
-      const n = parseInt(key, 10);
-      return isNaN(n) || n < 1 || n > tableCount;
-    })
-    .map(([key, orders]) => ({
-      key,
-      label: key === '__none__' ? 'ไม่ระบุ' : key,
-      orders,
-      status: deriveTableStatus(orders),
-    }));
-
   // ── legend counts ──────────────────────────────────────────────────────────
-  const allTables = [...numberedTables, ...extraTables];
+  const allTables = [...numberedTables];
   const statusCounts = {
     available: allTables.filter((t) => t.status === 'available').length,
     pending: allTables.filter((t) => t.status === 'pending').length,
@@ -197,22 +190,25 @@ export default function TablesScreen() {
     }).catch(() => {});
   };
 
-  const handleAdvance = (order: OrderWithItems) => {
-    const nextMap: Record<string, string> = { pending: 'preparing', preparing: 'ready', ready: 'completed' };
-    const labelMap: Record<string, string> = { pending: 'เริ่มทำอาหาร', preparing: 'พร้อมเสิร์ฟ', ready: 'เสร็จสิ้น' };
-    const next = nextMap[order.status];
-    if (!next) return;
+  const handleManualPay = (order: OrderWithItems) => {
+    const staffName = profile?.full_name ?? profile?.email ?? 'พนักงาน';
     Alert.alert(
-      labelMap[order.status],
-      `ออเดอร์ #${order.order_number}`,
+      'ยืนยันรับโอน/QR',
+      `ออเดอร์ #${order.order_number}\nยอด ${fmt(order.total_amount)}\n\nยืนยันโดย: ${staffName}`,
       [
         { text: 'ยกเลิก', style: 'cancel' },
         {
-          text: labelMap[order.status],
+          text: 'ยืนยันรับเงินแล้ว',
           onPress: async () => {
             try {
-              await updateOrderStatus(order.id, next);
+              await completeOrder(
+                order.id,
+                { method: 'qr', amount: order.total_amount ?? 0 },
+                'manual',
+                profile?.id
+              );
               fetchActive();
+              setSelectedTable(null);
             } catch (err: any) {
               Alert.alert('เกิดข้อผิดพลาด', err?.message);
             }
@@ -222,23 +218,40 @@ export default function TablesScreen() {
     );
   };
 
-  const handleManualPay = (order: OrderWithItems) => {
+  const handleCashPay = (order: OrderWithItems) => {
+    setSelectedTable(null); // close table detail modal first (two modals conflict)
+    setCashModal({ order, cashInput: '' });
+  };
+
+  const handleCashConfirm = async () => {
+    if (!cashModal) return;
+    const { order, cashInput } = cashModal;
+    const total = order.total_amount ?? 0;
+    const received = parseFloat(cashInput) || 0;
+    if (received < total) {
+      Alert.alert('เงินไม่พอ', `ยอดที่ต้องชำระ ${fmt(total)}`);
+      return;
+    }
+    const change = received - total;
+    const staffName = profile?.full_name ?? profile?.email ?? 'พนักงาน';
     Alert.alert(
-      'ยืนยันรับเงิน',
-      `ยืนยันรับชำระ ${fmt(order.total_amount)} ออเดอร์ #${order.order_number}`,
+      'ยืนยันรับเงินสด',
+      `ออเดอร์ #${order.order_number}\nยอด ${fmt(total)}\nรับมา ${fmt(received)}\nทอน ${fmt(change)}\n\nรับเงินโดย: ${staffName}`,
       [
         { text: 'ยกเลิก', style: 'cancel' },
         {
-          text: 'ยืนยันรับเงินแล้ว',
+          text: 'ยืนยัน',
           onPress: async () => {
             try {
               await completeOrder(
                 order.id,
-                { method: 'cash', amount: order.total_amount ?? 0 },
+                { method: 'cash', amount: total, cash_received: received, cash_change: change },
                 'manual',
                 profile?.id
               );
+              setCashModal(null);
               fetchActive();
+              setSelectedTable(null);
             } catch (err: any) {
               Alert.alert('เกิดข้อผิดพลาด', err?.message);
             }
@@ -328,7 +341,7 @@ export default function TablesScreen() {
   if (isLoading && activeOrders.length === 0) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>กำลังโหลด...</Text>
       </View>
     );
@@ -343,8 +356,8 @@ export default function TablesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); fetchActive(); }}
-            colors={[Colors.primary]}
-            tintColor={Colors.primary}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
       >
@@ -423,51 +436,59 @@ export default function TablesScreen() {
           })}
         </View>
 
-        {/* Extra tables */}
-        {extraTables.length > 0 && (
-          <View style={styles.extraSection}>
-            <Text style={styles.extraTitle}>โต๊ะอื่นๆ</Text>
-            <View style={styles.grid}>
-              {extraTables.map((t) => {
-                const s = TABLE_STATUS[t.status];
-                const isSource = movingFromTable === t.key;
-                const isTarget = !!movingFromTable && t.status === 'available' && !isSource;
-                const isBlocked = !!movingFromTable && t.status !== 'available' && !isSource;
-                return (
-                  <TouchableOpacity
-                    key={t.key}
-                    style={[
-                      styles.tableCell,
-                      { backgroundColor: s.bg, borderColor: s.color },
-                      isSource && styles.tableCellMoveSource,
-                      isTarget && styles.tableCellMoveTarget,
-                      isBlocked && styles.tableCellMoveBlocked,
-                    ]}
-                    onPress={() => handleTablePress(t.key)}
-                    onLongPress={() => handleTableLongPress(t.key)}
-                    delayLongPress={400}
-                    activeOpacity={0.7}
-                    disabled={isMoving}
-                  >
-                    <Text style={[styles.tableCellNum, { color: isSource ? '#DC2626' : s.color }]} numberOfLines={1}>
-                      {t.label}
-                    </Text>
-                    <Ionicons name={s.icon} size={16} color={isSource ? '#DC2626' : s.color} />
-                    <Text style={[styles.tableCellStatus, { color: isSource ? '#DC2626' : s.color }]}>
-                      {isSource ? 'ย้ายจาก' : isTarget ? 'วางที่นี่' : s.label}
-                    </Text>
-                    {t.orders.length > 0 && !isSource && (
-                      <Text style={[styles.tableCellOrders, { color: s.color }]}>
-                        {t.orders.length} ออเดอร์
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
       </ScrollView>
+
+      {/* Cash Payment Modal */}
+      <Modal visible={!!cashModal} transparent animationType="fade" onRequestClose={() => setCashModal(null)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.cashOverlay} onPress={() => setCashModal(null)}>
+            <Pressable style={styles.cashSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.cashSheetTitle}>รับเงินสด</Text>
+            {cashModal && (
+              <>
+                <Text style={styles.cashSheetOrder}>ออเดอร์ #{cashModal.order.order_number}</Text>
+                <Text style={styles.cashSheetTotal}>ยอด {fmt(cashModal.order.total_amount)}</Text>
+                <Text style={styles.cashSheetLabel}>รับเงินมา (฿)</Text>
+                <TextInput
+                  style={styles.cashSheetInput}
+                  value={cashModal.cashInput}
+                  onChangeText={(v) => setCashModal((prev) => prev ? { ...prev, cashInput: v } : prev)}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  autoFocus
+                />
+                {(() => {
+                  const received = parseFloat(cashModal.cashInput) || 0;
+                  const total = cashModal.order.total_amount ?? 0;
+                  const change = received - total;
+                  if (received > 0 && change >= 0) {
+                    return <Text style={styles.cashSheetChange}>ทอน {fmt(change)}</Text>;
+                  }
+                  if (received > 0 && change < 0) {
+                    return <Text style={styles.cashSheetShort}>ขาด {fmt(-change)}</Text>;
+                  }
+                  return null;
+                })()}
+                <Text style={styles.cashSheetStaff}>
+                  รับเงินโดย: {profile?.full_name ?? profile?.email ?? 'พนักงาน'}
+                </Text>
+                <View style={styles.cashSheetBtns}>
+                  <TouchableOpacity style={styles.cashSheetCancel} onPress={() => setCashModal(null)}>
+                    <Text style={styles.cashSheetCancelText}>ยกเลิก</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cashSheetConfirm} onPress={handleCashConfirm}>
+                    <Text style={styles.cashSheetConfirmText}>ยืนยัน</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Table Detail Modal */}
       <Modal
@@ -483,7 +504,7 @@ export default function TablesScreen() {
               โต๊ะ {selectedTableData?.label ?? selectedTable}
             </Text>
             <TouchableOpacity onPress={() => setSelectedTable(null)} style={styles.modalClose}>
-              <Ionicons name="close" size={24} color={Colors.text.primary} />
+              <Ionicons name="close" size={24} color={colors.text.primary} />
             </TouchableOpacity>
           </View>
 
@@ -526,7 +547,7 @@ export default function TablesScreen() {
                 </View>
                 <Text style={styles.qrInstruction}>ลูกค้าสแกนเพื่อสั่งอาหาร</Text>
                 <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-                  <Ionicons name="share-outline" size={16} color={Colors.primary} />
+                  <Ionicons name="share-outline" size={16} color={colors.primary} />
                   <Text style={styles.shareButtonText}>แชร์ลิงก์</Text>
                 </TouchableOpacity>
               </View>
@@ -554,10 +575,6 @@ export default function TablesScreen() {
                   const sLabel = TABLE_STATUS[order.status as TableStatus]?.label ?? order.status;
                   const items: any[] = (order as any).items ?? [];
                   const isPaid = order.payment?.status === 'success';
-                  const nextMap: Record<string, string> = { pending: 'preparing', preparing: 'ready', ready: 'completed' };
-                  const labelMap: Record<string, string> = { pending: 'เริ่มทำ', preparing: 'พร้อมเสิร์ฟ', ready: 'เสร็จสิ้น' };
-                  const hasNext = !!nextMap[order.status];
-
                   return (
                     <View key={order.id} style={styles.orderCard}>
                       <View style={styles.orderTop}>
@@ -579,32 +596,26 @@ export default function TablesScreen() {
                         <Text style={styles.itemMore}>+{items.length - 5} รายการ</Text>
                       )}
 
-                      {/* Total + action */}
-                      <View style={styles.orderBottom}>
-                        <Text style={styles.orderTotal}>{fmt(order.total_amount)}</Text>
-                        {isPaid ? (
-                          <View style={styles.paidBadge}>
-                            <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                            <Text style={styles.paidText}>ชำระแล้ว</Text>
-                          </View>
-                        ) : (
-                          <TouchableOpacity style={styles.payBtn} onPress={() => handleManualPay(order)}>
-                            <Ionicons name="cash-outline" size={14} color="#fff" />
-                            <Text style={styles.payBtnText}>รับเงิน</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
+                      {/* Total */}
+                      <Text style={styles.orderTotal}>{fmt(order.total_amount)}</Text>
 
-                      {hasNext && (
-                        <TouchableOpacity
-                          style={[styles.advanceBtn, { borderColor: sColor }]}
-                          onPress={() => handleAdvance(order)}
-                        >
-                          <Text style={[styles.advanceBtnText, { color: sColor }]}>
-                            {labelMap[order.status]}
-                          </Text>
-                          <Ionicons name="arrow-forward" size={14} color={sColor} />
-                        </TouchableOpacity>
+                      {/* Payment buttons or paid badge */}
+                      {isPaid ? (
+                        <View style={styles.paidBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                          <Text style={styles.paidText}>ชำระแล้ว</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.payBtnRow}>
+                          <TouchableOpacity style={styles.payQrBtn} onPress={() => handleManualPay(order)}>
+                            <Ionicons name="phone-portrait-outline" size={14} color="#fff" />
+                            <Text style={styles.payBtnText}>ยืนยันรับโอน</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.payCashBtn} onPress={() => handleCashPay(order)}>
+                            <Ionicons name="cash-outline" size={14} color="#fff" />
+                            <Text style={styles.payBtnText}>รับเงินสด</Text>
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   );
@@ -612,7 +623,7 @@ export default function TablesScreen() {
               </View>
             ) : selectedTableData ? (
               <View style={styles.emptyOrders}>
-                <Ionicons name="checkmark-circle-outline" size={40} color={Colors.text.light} />
+                <Ionicons name="checkmark-circle-outline" size={40} color={colors.text.light} />
                 <Text style={styles.emptyOrdersText}>ไม่มีออเดอร์</Text>
               </View>
             ) : null}
@@ -625,11 +636,11 @@ export default function TablesScreen() {
 
 // ─── styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   flex: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   content: {
     padding: 12,
@@ -639,11 +650,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 12,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     fontSize: 15,
   },
 
@@ -651,12 +662,11 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: 12,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    ...shadow.sm,
   },
   legendItem: {
     flexDirection: 'row',
@@ -671,13 +681,13 @@ const styles = StyleSheet.create({
   legendLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   legendCount: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.text.light,
-    backgroundColor: Colors.background,
+    color: colors.text.light,
+    backgroundColor: colors.background,
     borderRadius: 8,
     paddingHorizontal: 5,
     overflow: 'hidden',
@@ -714,21 +724,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Extra tables
-  extraSection: {
-    marginTop: 20,
-  },
-  extraTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: 10,
-  },
-
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -736,14 +735,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   modalClose: {
     padding: 4,
@@ -772,18 +771,17 @@ const styles = StyleSheet.create({
 
   // QR Card (in modal)
   qrCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: 20,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
     marginBottom: 16,
+    ...shadow.md,
   },
   qrCardTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     marginBottom: 12,
   },
   qrBox: {
@@ -792,11 +790,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   qrInstruction: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     marginBottom: 10,
   },
   shareButton: {
@@ -807,12 +805,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
   },
   shareButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.primary,
+    color: colors.primary,
   },
 
   // Orders section
@@ -822,16 +820,15 @@ const styles = StyleSheet.create({
   ordersSectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     marginBottom: 10,
   },
   orderCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    ...shadow.sm,
   },
   orderTop: {
     flexDirection: 'row',
@@ -842,11 +839,11 @@ const styles = StyleSheet.create({
   orderNum: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   orderTime: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
     flex: 1,
   },
   statusPill: {
@@ -861,28 +858,23 @@ const styles = StyleSheet.create({
   },
   itemRow: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   itemPrice: {
-    color: Colors.text.light,
+    color: colors.text.light,
   },
   itemMore: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
     fontStyle: 'italic',
   },
-  orderBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
   orderTotal: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
+    marginTop: 10,
+    marginBottom: 10,
   },
   paidBadge: {
     flexDirection: 'row',
@@ -890,40 +882,139 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: '#D1FAE5',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 20,
+    alignSelf: 'flex-start',
   },
   paidText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#059669',
   },
-  payBtn: {
+  payBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  payQrBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  payCashBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: colors.success,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   payBtnText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  advanceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Cash payment modal
+  cashOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    alignItems: 'center',
   },
-  advanceBtnText: {
+  cashSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: 24,
+    width: '86%',
+    maxWidth: 400,
+    ...shadow.lg,
+  },
+  cashSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  cashSheetOrder: {
     fontSize: 13,
+    color: colors.text.secondary,
+    marginBottom: 2,
+  },
+  cashSheetTotal: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 16,
+  },
+  cashSheetLabel: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  cashSheetInput: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: colors.text.primary,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+    paddingBottom: 4,
+    marginBottom: 10,
+  },
+  cashSheetChange: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.success,
+    marginBottom: 8,
+  },
+  cashSheetShort: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.danger,
+    marginBottom: 8,
+  },
+  cashSheetStaff: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginBottom: 18,
+    fontStyle: 'italic',
+  },
+  cashSheetBtns: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cashSheetCancel: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cashSheetCancelText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  cashSheetConfirm: {
+    flex: 2,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cashSheetConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   // Move mode
@@ -998,6 +1089,6 @@ const styles = StyleSheet.create({
   },
   emptyOrdersText: {
     fontSize: 14,
-    color: Colors.text.light,
+    color: colors.text.light,
   },
 });

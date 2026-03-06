@@ -1,14 +1,10 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { TouchableOpacity, View, Text, Image, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { Product } from '../src/types';
-import { Colors } from '../constants/colors';
-
-const AVATAR_COLORS = ['#FF8A80', '#80DEEA', '#FFD54F', '#80CBC4', '#CE93D8'];
-
-function getAvatarColor(name: string): string {
-  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
-}
+import { shadow, radius } from '../constants/theme';
+import { useTheme, ThemeColors } from '../constants/ThemeContext';
 
 interface ProductCardProps {
   product: Product;
@@ -17,9 +13,16 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onPress, width }: ProductCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const isOutOfStock = product.stock === 0;
   const isLowStock = product.stock > 0 && product.stock <= 10;
-  const avatarColor = getAvatarColor(product.name);
+
+  // Pick avatar gradient based on first character of name
+  const avatarGradient = colors.gradient.avatar[
+    product.name.charCodeAt(0) % colors.gradient.avatar.length
+  ];
   const avatarLetter = product.name.charAt(0).toUpperCase();
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -59,9 +62,14 @@ export function ProductCard({ product, onPress, width }: ProductCardProps) {
                 resizeMode="cover"
               />
             ) : (
-              <View style={[styles.avatarBg, { backgroundColor: avatarColor }]}>
+              <LinearGradient
+                colors={avatarGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatarBg}
+              >
                 <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-              </View>
+              </LinearGradient>
             )}
 
             {/* Out of stock overlay */}
@@ -99,25 +107,21 @@ export function ProductCard({ product, onPress, width }: ProductCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   wrapper: {
     marginBottom: 12,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 4,
+    ...shadow.md,
   },
   cardDisabled: {
-    opacity: 0.55,
+    opacity: 0.45,
   },
   imageArea: {
-    height: 110,
+    height: 118,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -133,51 +137,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarLetter: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: '700',
     color: '#FFFFFF',
+    opacity: 0.9,
   },
   outOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.38)',
+    backgroundColor: 'rgba(15,23,42,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   outBadge: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: colors.danger,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.full,
   },
   outBadgeText: {
-    color: '#FFFFFF',
+    color: colors.text.inverse,
     fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
   lowStockBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 20,
+    backgroundColor: colors.warning,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
   },
   lowStockText: {
-    color: '#FFFFFF',
-    fontSize: 10,
+    color: colors.text.inverse,
+    fontSize: 11,
     fontWeight: '700',
   },
   info: {
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 11,
+    paddingBottom: 13,
   },
   name: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 6,
+    color: colors.text.primary,
+    marginBottom: 7,
+    lineHeight: 20,
   },
   priceRow: {
     flexDirection: 'row',
@@ -187,14 +194,17 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 17,
     fontWeight: '800',
-    color: Colors.primary,
+    color: colors.primary,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'] as any,
   },
   addBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.primary,
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadow.sm,
   },
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,15 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { shadow, radius } from '../../constants/theme';
 import { useAuthStore } from '../../src/store/authStore';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 export default function LoginScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,8 +51,13 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Top teal section — 38% height */}
-      <View style={[styles.topSection, { height: SCREEN_HEIGHT * 0.38 }]}>
+      {/* Top gradient hero — 38% height */}
+      <LinearGradient
+        colors={colors.gradient.primary}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.topSection, { height: SCREEN_HEIGHT * 0.38 }]}
+      >
         {/* POS icon: 2×2 grid of squares */}
         <View style={styles.posIcon}>
           <View style={styles.posIconRow}>
@@ -61,9 +71,9 @@ export default function LoginScreen() {
         </View>
         <Text style={styles.brandName}>QRForPay</Text>
         <Text style={styles.brandTagline}>ระบบขายหน้าร้าน</Text>
-      </View>
+      </LinearGradient>
 
-      {/* Bottom white card — 62% height */}
+      {/* Bottom card — 62% height */}
       <View style={styles.bottomCard}>
         <Text style={styles.welcomeTitle}>ยินดีต้อนรับ</Text>
         <Text style={styles.welcomeSubtitle}>เข้าสู่ระบบเพื่อเริ่มขาย</Text>
@@ -73,13 +83,13 @@ export default function LoginScreen() {
           <Ionicons
             name="mail-outline"
             size={20}
-            color={emailFocused ? Colors.primary : Colors.text.light}
+            color={emailFocused ? colors.primary : colors.text.light}
             style={styles.inputIcon}
           />
           <TextInput
             style={styles.input}
             placeholder="your@email.com"
-            placeholderTextColor={Colors.text.light}
+            placeholderTextColor={colors.text.light}
             value={email}
             onChangeText={setEmail}
             onFocus={() => setEmailFocused(true)}
@@ -96,13 +106,13 @@ export default function LoginScreen() {
           <Ionicons
             name="lock-closed-outline"
             size={20}
-            color={passwordFocused ? Colors.primary : Colors.text.light}
+            color={passwordFocused ? colors.primary : colors.text.light}
             style={styles.inputIcon}
           />
           <TextInput
             style={styles.input}
             placeholder="••••••••"
-            placeholderTextColor={Colors.text.light}
+            placeholderTextColor={colors.text.light}
             value={password}
             onChangeText={setPassword}
             onFocus={() => setPasswordFocused(true)}
@@ -114,7 +124,7 @@ export default function LoginScreen() {
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
               size={20}
-              color={Colors.text.light}
+              color={colors.text.light}
             />
           </TouchableOpacity>
         </View>
@@ -130,7 +140,7 @@ export default function LoginScreen() {
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color={Colors.surface} />
+            <ActivityIndicator color={colors.text.inverse} />
           ) : (
             <Text style={styles.loginButtonText}>เข้าสู่ระบบ</Text>
           )}
@@ -140,13 +150,13 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   topSection: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingBottom: 16,
@@ -160,29 +170,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   posSquare: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   posSquareAccent: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
   brandName: {
-    fontSize: 30,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
   brandTagline: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.70)',
-    marginTop: 4,
-    letterSpacing: 0.3,
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 6,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontWeight: '500',
   },
   bottomCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 28,
@@ -192,41 +204,42 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   welcomeSubtitle: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     marginBottom: 28,
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     marginBottom: 6,
     marginTop: 14,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     paddingHorizontal: 12,
   },
   inputContainerFocused: {
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
   },
   inputIcon: {
     marginRight: 8,
   },
   input: {
     flex: 1,
-    height: 48,
+    height: 52,
     fontSize: 15,
-    color: Colors.text.primary,
+    color: colors.text.primary,
     ...(Platform.OS === 'web' && { outlineWidth: 0 }),
   },
   eyeIcon: {
@@ -234,29 +247,26 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    color: Colors.danger,
+    color: colors.danger,
     marginTop: 10,
     marginLeft: 2,
   },
   loginButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    height: 52,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 28,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
-    elevation: 4,
+    ...shadow.md,
   },
   loginButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.45,
   },
   loginButtonText: {
-    color: Colors.surface,
+    color: colors.text.inverse,
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

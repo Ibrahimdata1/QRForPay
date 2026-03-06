@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -16,13 +20,14 @@ import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { OrderWithItems } from '../../src/types';
 import { OrderDetailModal } from '../../components/OrderDetailModal';
-import { Colors } from '../../constants/colors';
+import { shadow, radius } from '../../constants/theme';
 import { supabase } from '../../src/lib/supabase';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 const statusColors: Record<string, string> = {
   pending: '#F59E0B',
   preparing: '#8B5CF6',
-  ready: '#059669',
+  ready: '#EA580C',
   completed: '#10B981',
   cancelled: '#EF4444',
 };
@@ -30,7 +35,7 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   pending: 'รอดำเนินการ',
   preparing: 'กำลังทำ',
-  ready: 'พร้อมเสิร์ฟ',
+  ready: 'เสิร์ฟแล้ว',
   completed: 'เสร็จสิ้น',
   cancelled: 'ยกเลิก',
 };
@@ -42,6 +47,9 @@ const methodLabels: Record<string, string> = {
 };
 
 export default function OrdersScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
   const orders = useOrderStore((s) => s.orders);
@@ -55,6 +63,7 @@ export default function OrdersScreen() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
+  const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -124,23 +133,69 @@ export default function OrdersScreen() {
   };
 
   const handleManualConfirm = (order: OrderWithItems) => {
+    setSelectedOrder(null); // close order detail modal first
+    setPayModal({ order, method: 'qr', cashInput: '' });
+  };
+
+  const handlePayConfirm = async () => {
+    if (!payModal || !profile?.id) return;
+    const { order, method, cashInput } = payModal;
+    const total = order.total_amount ?? 0;
+
+    if (method === 'cash') {
+      const received = parseFloat(cashInput) || 0;
+      if (received < total) {
+        Alert.alert('เงินไม่พอ', `ยอดที่ต้องชำระ ฿${total.toFixed(0)}`);
+        return;
+      }
+      const change = received - total;
+      const staffName = profile.full_name ?? profile.email ?? 'พนักงาน';
+      Alert.alert(
+        'ยืนยันรับเงินสด',
+        `ออเดอร์ #${order.order_number}\nยอด ฿${total.toFixed(0)}\nรับมา ฿${received.toFixed(0)}\nทอน ฿${change.toFixed(0)}\n\nรับเงินโดย: ${staffName}`,
+        [
+          { text: 'ยกเลิก', style: 'cancel' },
+          {
+            text: 'ยืนยัน',
+            onPress: async () => {
+              try {
+                await completeOrder(order.id, { method: 'cash', amount: total, cash_received: received, cash_change: change }, 'manual', profile.id);
+                setPayModal(null);
+                if (shop?.id) fetchOrders(shop.id);
+              } catch (err: any) {
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยืนยันชำระเงินไม่สำเร็จ');
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      try {
+        await completeOrder(order.id, { method: 'qr', amount: total }, 'manual', profile.id);
+        setPayModal(null);
+        if (shop?.id) fetchOrders(shop.id);
+      } catch (err: any) {
+        Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยืนยันชำระเงินไม่สำเร็จ');
+      }
+    }
+  };
+
+  const handleServed = (order: OrderWithItems) => {
     Alert.alert(
-      'ยืนยันรับเงินแล้ว',
-      `ยืนยันว่าได้รับเงิน ฿${(order.total_amount ?? 0).toFixed(0)} จากออเดอร์ #${order.order_number} แล้ว?\n\nออเดอร์จะถูกปิดเป็น "เสร็จสิ้น"`,
+      'เสิร์ฟแล้ว',
+      `ยืนยันว่าเสิร์ฟออเดอร์ #${order.order_number} แล้ว?`,
       [
         { text: 'ยกเลิก', style: 'cancel' },
         {
-          text: 'ยืนยันรับเงิน',
-          style: 'default',
+          text: 'ยืนยัน',
           onPress: () => {
-            if (!profile?.id) return;
-            completeOrder(order.id, { method: order.payment_method || 'qr' }, 'manual', profile.id)
+            updateOrderStatus(order.id, 'completed')
               .then(() => {
                 setSelectedOrder(null);
                 if (shop?.id) fetchOrders(shop.id);
               })
               .catch((err: any) => {
-                Alert.alert('เกิดข้อผิดพลาด', err.message || 'ยืนยันชำระเงินไม่สำเร็จ');
+                Alert.alert('เกิดข้อผิดพลาด', err.message || 'เปลี่ยนสถานะไม่สำเร็จ');
               });
           },
         },
@@ -243,7 +298,7 @@ export default function OrdersScreen() {
               onPress={() => handleAddItemsToOrder(order)}
               activeOpacity={0.8}
             >
-              <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+              <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
               <Text style={styles.addItemsButtonText}>+ เพิ่มสินค้า</Text>
             </TouchableOpacity>
           ) : null}
@@ -295,16 +350,16 @@ export default function OrdersScreen() {
 
           <View style={styles.orderMeta}>
             <View style={styles.detailRow}>
-              <Ionicons name="time-outline" size={14} color={Colors.text.light} />
+              <Ionicons name="time-outline" size={14} color={colors.text.light} />
               <Text style={styles.detailText}>{formatDateTime(item.created_at)}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Ionicons name="cube-outline" size={14} color={Colors.text.light} />
+              <Ionicons name="cube-outline" size={14} color={colors.text.light} />
               <Text style={styles.detailText}>{item.items?.length ?? 0} รายการ</Text>
             </View>
             {item.payment_method ? (
               <View style={styles.detailRow}>
-                <Ionicons name="card-outline" size={14} color={Colors.text.light} />
+                <Ionicons name="card-outline" size={14} color={colors.text.light} />
                 <Text style={styles.detailText}>
                   {methodLabels[item.payment_method] || item.payment_method}
                 </Text>
@@ -372,7 +427,7 @@ export default function OrdersScreen() {
   if (isLoading && orders.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -419,7 +474,7 @@ export default function OrdersScreen() {
             <TextInput
               style={styles.searchInput}
               placeholder="ค้นหาเลขออเดอร์..."
-              placeholderTextColor={Colors.text.light}
+              placeholderTextColor={colors.text.light}
               value={searchText}
               onChangeText={setSearchText}
             />
@@ -442,7 +497,7 @@ export default function OrdersScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={Colors.text.light} />
+            <Ionicons name="receipt-outline" size={64} color={colors.text.light} />
             <Text style={styles.emptyText}>
               {searchText !== '' || statusFilter !== 'all'
                 ? 'ไม่พบออเดอร์ที่ตรงกับการค้นหา'
@@ -458,6 +513,7 @@ export default function OrdersScreen() {
         onCancel={handleCancelOrder}
         onPayPending={handlePayPendingOrder}
         onManualConfirm={handleManualConfirm}
+        onServed={handleServed}
         profileId={profile?.id}
         onCancelItem={(orderId, itemId, cancelledBy) => {
           cancelOrderItem(orderId, itemId, cancelledBy)
@@ -469,14 +525,87 @@ export default function OrdersScreen() {
             });
         }}
       />
+
+      {/* Payment method selection modal */}
+      <Modal visible={!!payModal} transparent animationType="fade" onRequestClose={() => setPayModal(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={styles.payOverlay} onPress={() => setPayModal(null)}>
+            <Pressable style={styles.paySheet} onPress={(e) => e.stopPropagation()}>
+              {payModal && (
+                <>
+                  <Text style={styles.paySheetTitle}>ยืนยันรับชำระเงิน</Text>
+                  <Text style={styles.paySheetOrder}>ออเดอร์ #{payModal.order.order_number}</Text>
+                  <Text style={styles.paySheetTotal}>฿{(payModal.order.total_amount ?? 0).toFixed(0)}</Text>
+
+                  {/* Method selector */}
+                  <Text style={styles.paySheetLabel}>วิธีชำระเงิน</Text>
+                  <View style={styles.methodRow}>
+                    <TouchableOpacity
+                      style={[styles.methodPill, payModal.method === 'qr' && styles.methodPillActive]}
+                      onPress={() => setPayModal((p) => p ? { ...p, method: 'qr', cashInput: '' } : p)}
+                    >
+                      <Ionicons name="phone-portrait-outline" size={16} color={payModal.method === 'qr' ? '#fff' : colors.text.secondary} />
+                      <Text style={[styles.methodPillText, payModal.method === 'qr' && styles.methodPillTextActive]}>โอน/QR</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.methodPill, payModal.method === 'cash' && styles.methodPillActive]}
+                      onPress={() => setPayModal((p) => p ? { ...p, method: 'cash' } : p)}
+                    >
+                      <Ionicons name="cash-outline" size={16} color={payModal.method === 'cash' ? '#fff' : colors.text.secondary} />
+                      <Text style={[styles.methodPillText, payModal.method === 'cash' && styles.methodPillTextActive]}>เงินสด</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Cash input */}
+                  {payModal.method === 'cash' && (
+                    <View style={styles.cashSection}>
+                      <Text style={styles.paySheetLabel}>รับเงินมา (฿)</Text>
+                      <TextInput
+                        style={styles.cashInput}
+                        value={payModal.cashInput}
+                        onChangeText={(v) => setPayModal((p) => p ? { ...p, cashInput: v } : p)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor={colors.text.light}
+                        autoFocus
+                      />
+                      {(() => {
+                        const received = parseFloat(payModal.cashInput) || 0;
+                        const total = payModal.order.total_amount ?? 0;
+                        const change = received - total;
+                        if (received > 0 && change >= 0) return <Text style={styles.changeText}>ทอน ฿{change.toFixed(0)}</Text>;
+                        if (received > 0 && change < 0) return <Text style={styles.shortText}>ขาด ฿{(-change).toFixed(0)}</Text>;
+                        return null;
+                      })()}
+                    </View>
+                  )}
+
+                  <Text style={styles.staffText}>
+                    รับเงินโดย: {profile?.full_name ?? profile?.email ?? 'พนักงาน'}
+                  </Text>
+
+                  <View style={styles.payBtns}>
+                    <TouchableOpacity style={styles.payCancelBtn} onPress={() => setPayModal(null)}>
+                      <Text style={styles.payCancelText}>ยกเลิก</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.payConfirmBtn} onPress={handlePayConfirm}>
+                      <Text style={styles.payConfirmText}>ยืนยันรับเงิน</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -508,11 +637,11 @@ const styles = StyleSheet.create({
   pendingSectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   pendingSectionCount: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   pendingScroll: {
@@ -520,17 +649,11 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   pendingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: 14,
     width: 200,
-    borderWidth: 1.5,
-    borderColor: '#FCD34D',
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
+    ...shadow.md,
   },
   pendingCardHeader: {
     flexDirection: 'row',
@@ -545,7 +668,7 @@ const styles = StyleSheet.create({
   pendingOrderNum: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   tableBadge: {
     flexDirection: 'row',
@@ -564,7 +687,7 @@ const styles = StyleSheet.create({
   },
   pendingTime: {
     fontSize: 11,
-    color: Colors.text.light,
+    color: colors.text.light,
     textAlign: 'right',
     flexShrink: 0,
     maxWidth: 80,
@@ -574,24 +697,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
     paddingTop: 10,
   },
   pendingTotal: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.primary,
+    color: colors.primary,
     flex: 1,
   },
   pendingItemCount: {
     fontSize: 12,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   addItemsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
@@ -599,7 +722,7 @@ const styles = StyleSheet.create({
   addItemsButtonText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.primary,
+    color: colors.primary,
   },
   kitchenActionButton: {
     paddingHorizontal: 10,
@@ -626,8 +749,8 @@ const styles = StyleSheet.create({
     color: '#16A34A',
   },
   pendingCardCustomer: {
-    borderColor: '#86EFAC',
-    borderWidth: 1.5,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.success,
   },
   miniStatusBadge: {
     paddingHorizontal: 6,
@@ -641,13 +764,12 @@ const styles = StyleSheet.create({
   searchInput: {
     margin: 12,
     marginBottom: 8,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: radius.full,
+    backgroundColor: colors.borderLight,
     fontSize: 14,
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   filterRow: {
     paddingHorizontal: 12,
@@ -657,39 +779,33 @@ const styles = StyleSheet.create({
   },
   filterPill: {
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 7,
+    borderRadius: radius.full,
     borderWidth: 1,
   },
   filterPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterPillInactive: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   filterPillText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   filterPillTextActive: {
     color: '#FFFFFF',
   },
   filterPillTextInactive: {
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   orderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginBottom: 10,
+    ...shadow.md,
     flexDirection: 'row',
     overflow: 'hidden',
   },
@@ -710,7 +826,7 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   tableTagSmall: {
     backgroundColor: '#ECFDF5',
@@ -726,7 +842,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: radius.full,
     flexShrink: 0,
   },
   statusText: {
@@ -746,7 +862,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 12,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   confirmationRow: {
     marginBottom: 10,
@@ -764,7 +880,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   confirmBadgeAuto: {
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: colors.primaryLight,
   },
   confirmBadgeText: {
     fontSize: 11,
@@ -775,17 +891,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
     paddingTop: 10,
   },
   totalLabel: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   totalAmount: {
     fontSize: 17,
     fontWeight: '700',
-    color: Colors.primary,
+    color: colors.primary,
+    fontVariant: ['tabular-nums'] as any,
+    letterSpacing: -0.3,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -794,7 +912,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: Colors.text.light,
+    color: colors.text.light,
     marginTop: 12,
   },
   errorBanner: {
@@ -811,5 +929,133 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#B45309',
     flex: 1,
+  },
+  // Payment modal
+  payOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paySheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: 24,
+    width: '86%',
+    maxWidth: 400,
+    ...shadow.lg,
+  },
+  paySheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  paySheetOrder: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginBottom: 2,
+  },
+  paySheetTotal: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: colors.primary,
+    marginBottom: 16,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  paySheetLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: 8,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  methodPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  methodPillActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  methodPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  methodPillTextActive: {
+    color: '#FFFFFF',
+  },
+  cashSection: {
+    marginBottom: 12,
+  },
+  cashInput: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: colors.text.primary,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+    paddingBottom: 4,
+    marginBottom: 8,
+  },
+  changeText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  shortText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  staffText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    marginBottom: 20,
+  },
+  payBtns: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  payCancelBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  payCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  payConfirmBtn: {
+    flex: 2,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  payConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -1,10 +1,12 @@
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { TouchableOpacity, Alert, Platform } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { shadow } from '../../constants/theme';
 import { useAuthStore } from '../../src/store/authStore';
+import { useTheme } from '../../constants/ThemeContext';
 
 export default function POSLayout() {
+  const { colors } = useTheme();
   const signOut = useAuthStore((s) => s.signOut);
 
   const handleLogout = async () => {
@@ -36,15 +38,16 @@ export default function POSLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.text.light,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.text.light,
         tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.borderLight,
           borderTopWidth: 1,
           height: Platform.OS === 'web' ? 80 : 72,
           paddingBottom: Platform.OS === 'web' ? 28 : 16,
           paddingTop: 8,
+          ...shadow.bottom,
         },
         tabBarShowLabel: Platform.OS !== 'web',
         tabBarLabelStyle: {
@@ -52,18 +55,18 @@ export default function POSLayout() {
           fontWeight: '600',
         },
         headerStyle: {
-          backgroundColor: Colors.surface,
-          borderBottomColor: Colors.border,
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
           borderBottomWidth: 1,
         },
-        headerTintColor: Colors.text.primary,
+        headerTintColor: colors.text.primary,
         headerTitleStyle: {
           fontWeight: '700',
           fontSize: 18,
         },
         headerRight: () => (
           <TouchableOpacity onPress={handleLogout} style={{ marginRight: 16 }}>
-            <Ionicons name="log-out-outline" size={24} color={Colors.text.secondary} />
+            <Ionicons name="log-out-outline" size={24} color={colors.text.secondary} />
           </TouchableOpacity>
         ),
       }}

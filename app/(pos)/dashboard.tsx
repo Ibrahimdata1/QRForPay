@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
-import { Colors } from '../../constants/colors';
+import { shadow, radius } from '../../constants/theme';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 interface DashboardStats {
   totalSales: number;
@@ -26,6 +28,9 @@ interface TopProduct {
 }
 
 export default function DashboardScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const shop = useAuthStore((s) => s.shop);
   const [stats, setStats] = useState<DashboardStats>({ totalSales: 0, orderCount: 0, avgPerOrder: 0 });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -124,7 +129,7 @@ export default function DashboardScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -134,7 +139,7 @@ export default function DashboardScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
       }
     >
       {/* Date header */}
@@ -150,40 +155,51 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {/* Stat cards row */}
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, styles.statCardPrimary]}>
-          <Ionicons name="cash-outline" size={22} color={Colors.surface} style={styles.statIcon} />
-          <Text style={styles.statLabelLight}>ยอดวันนี้</Text>
-          <Text style={styles.statValueLarge}>฿{stats.totalSales.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-        </View>
-      </View>
-
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, styles.statCardSmall]}>
-          <Ionicons name="receipt-outline" size={20} color={Colors.primary} style={styles.statIcon} />
-          <Text style={styles.statLabel}>จำนวนออเดอร์</Text>
-          <Text style={styles.statValue}>{stats.orderCount}</Text>
-        </View>
-        <View style={[styles.statCard, styles.statCardSmall]}>
-          <Ionicons name="trending-up-outline" size={20} color={Colors.secondary} style={styles.statIcon} />
-          <Text style={styles.statLabel}>เฉลี่ย/ออเดอร์</Text>
-          <Text style={[styles.statValue, { color: Colors.secondary }]}>
-            ฿{stats.avgPerOrder.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      {/* Hero gradient card */}
+      <LinearGradient
+        colors={colors.gradient.primary}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroCard}
+      >
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroBadge}>
+            <Ionicons name="flash" size={12} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.heroBadgeText}>วันนี้</Text>
+          </View>
+          <Text style={styles.heroDateText}>
+            {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', calendar: 'gregory' })}
           </Text>
         </View>
-      </View>
+        <Text style={styles.heroLabel}>ยอดขายรวม</Text>
+        <Text style={styles.heroAmount}>
+          ฿{stats.totalSales.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+        </Text>
+        <View style={styles.heroFooter}>
+          <View style={styles.heroStat}>
+            <Ionicons name="receipt-outline" size={14} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.heroStatText}>{stats.orderCount} ออเดอร์</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStat}>
+            <Ionicons name="trending-up-outline" size={14} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.heroStatText}>
+              เฉลี่ย ฿{stats.avgPerOrder.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
 
       {/* Top products section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="trophy-outline" size={18} color={Colors.warning} />
+          <Ionicons name="trophy-outline" size={18} color={colors.warning} />
           <Text style={styles.sectionTitle}>สินค้าขายดี 5 อันดับ</Text>
         </View>
 
         {topProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="bar-chart-outline" size={48} color={Colors.text.light} />
+            <Ionicons name="bar-chart-outline" size={48} color={colors.text.light} />
             <Text style={styles.emptyText}>ยังไม่มีข้อมูลยอดขายวันนี้</Text>
           </View>
         ) : (
@@ -217,10 +233,10 @@ export default function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   centered: {
     justifyContent: 'center',
@@ -232,72 +248,89 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.light,
     marginBottom: 16,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
-  statsRow: {
+  // Hero gradient card
+  heroCard: {
+    borderRadius: radius['2xl'],
+    padding: 24,
+    marginBottom: 16,
+    ...shadow.lg,
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
   },
-  statCardPrimary: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  statCardSmall: {
-    flex: 1,
-  },
-  statIcon: {
-    marginBottom: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  statLabelLight: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 22,
+  heroBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-  statValueLarge: {
-    fontSize: 26,
+  heroDateText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+  },
+  heroLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  heroAmount: {
+    fontSize: 42,
     fontWeight: '800',
-    color: Colors.surface,
+    color: '#FFFFFF',
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'] as any,
+    marginBottom: 20,
+  },
+  heroFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.15)',
+  },
+  heroStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroStatText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'] as any,
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   section: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: 16,
     marginTop: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...shadow.md,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -308,7 +341,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -317,15 +350,15 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.text.light,
+    color: colors.text.light,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningLight,
     borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderColor: colors.warning + '50',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -342,14 +375,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: colors.borderLight,
     gap: 12,
   },
   rankBadge: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -365,7 +398,7 @@ const styles = StyleSheet.create({
   rankText: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   rankTextLight: {
     color: '#FFFFFF',
@@ -374,7 +407,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   productStats: {
     alignItems: 'flex-end',
@@ -382,11 +415,11 @@ const styles = StyleSheet.create({
   },
   productQty: {
     fontSize: 12,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   productRevenue: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.primary,
+    color: colors.primary,
   },
 });

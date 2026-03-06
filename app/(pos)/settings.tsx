@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
-import { Colors } from '../../constants/colors';
+import { shadow, radius } from '../../constants/theme';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 export default function SettingsScreen() {
+  const { colors, isDark, override, setOverride } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const shop = useAuthStore((s) => s.shop);
   const profile = useAuthStore((s) => s.profile);
   const user = useAuthStore((s) => s.user);
@@ -139,7 +143,7 @@ export default function SettingsScreen() {
         {/* Shop Settings Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="storefront-outline" size={18} color={Colors.primary} />
+            <Ionicons name="storefront-outline" size={18} color={colors.primary} />
             <Text style={styles.sectionTitle}>ข้อมูลร้าน</Text>
           </View>
 
@@ -150,7 +154,7 @@ export default function SettingsScreen() {
               value={shopName}
               onChangeText={handleShopNameChange}
               placeholder="ชื่อร้านของคุณ"
-              placeholderTextColor={Colors.text.light}
+              placeholderTextColor={colors.text.light}
               editable={isOwner}
               returnKeyType="next"
             />
@@ -163,10 +167,9 @@ export default function SettingsScreen() {
               value={promptpayId}
               onChangeText={handlePromptpayChange}
               placeholder="เบอร์โทรหรือเลขบัตรประชาชน"
-              placeholderTextColor={Colors.text.light}
+              placeholderTextColor={colors.text.light}
               editable={isOwner}
               keyboardType="phone-pad"
-              returnKeyType="done"
             />
             <Text style={styles.fieldHint}>รองรับ: เบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก</Text>
           </View>
@@ -178,17 +181,16 @@ export default function SettingsScreen() {
               value={tableCount}
               onChangeText={handleTableCountChange}
               placeholder="10"
-              placeholderTextColor={Colors.text.light}
+              placeholderTextColor={colors.text.light}
               editable={isOwner}
-              keyboardType="number-pad"
-              returnKeyType="done"
+              keyboardType="numeric"
             />
             <Text style={styles.fieldHint}>ตั้งจำนวนโต๊ะในร้าน (1-100) สำหรับหน้าจัดการโต๊ะ</Text>
           </View>
 
           {!isOwner && (
             <View style={styles.readOnlyNotice}>
-              <Ionicons name="lock-closed-outline" size={14} color={Colors.text.light} />
+              <Ionicons name="lock-closed-outline" size={14} color={colors.text.light} />
               <Text style={styles.readOnlyText}>เฉพาะเจ้าของร้านเท่านั้นที่แก้ไขได้</Text>
             </View>
           )}
@@ -203,10 +205,10 @@ export default function SettingsScreen() {
             activeOpacity={0.8}
           >
             {isSaving ? (
-              <ActivityIndicator color={Colors.surface} size="small" />
+              <ActivityIndicator color={colors.text.inverse} size="small" />
             ) : (
               <>
-                <Ionicons name="save-outline" size={18} color={Colors.surface} />
+                <Ionicons name="save-outline" size={18} color={colors.text.inverse} />
                 <Text style={styles.saveButtonText}>บันทึก</Text>
               </>
             )}
@@ -216,7 +218,7 @@ export default function SettingsScreen() {
         {/* User Profile Section (read-only) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="person-outline" size={18} color={Colors.primary} />
+            <Ionicons name="person-outline" size={18} color={colors.primary} />
             <Text style={styles.sectionTitle}>ข้อมูลผู้ใช้</Text>
           </View>
 
@@ -234,7 +236,7 @@ export default function SettingsScreen() {
             <Ionicons
               name={isOwner ? 'shield-checkmark-outline' : 'person-circle-outline'}
               size={14}
-              color={isOwner ? Colors.primary : Colors.text.secondary}
+              color={isOwner ? colors.primary : colors.text.secondary}
             />
             <Text style={[styles.roleText, isOwner && styles.roleTextOwner]}>
               {isOwner ? 'เจ้าของร้าน' : 'แคชเชียร์'}
@@ -242,38 +244,93 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Dark Mode Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="contrast-outline" size={18} color={colors.primary} />
+            <Text style={styles.sectionTitle}>ธีม</Text>
+          </View>
+
+          <View style={styles.themeRow}>
+            {/* Light */}
+            <TouchableOpacity
+              style={[styles.themePill, override === 'light' && styles.themePillActive, override === null && !isDark && styles.themePillActive]}
+              onPress={() => setOverride('light')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="sunny-outline"
+                size={16}
+                color={(override === 'light' || (override === null && !isDark)) ? colors.text.inverse : colors.text.secondary}
+              />
+              <Text style={[styles.themePillText, (override === 'light' || (override === null && !isDark)) && styles.themePillTextActive]}>
+                สว่าง
+              </Text>
+            </TouchableOpacity>
+
+            {/* System */}
+            <TouchableOpacity
+              style={[styles.themePill, override === null && styles.themePillActive]}
+              onPress={() => setOverride(null)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="phone-portrait-outline"
+                size={16}
+                color={override === null ? colors.text.inverse : colors.text.secondary}
+              />
+              <Text style={[styles.themePillText, override === null && styles.themePillTextActive]}>
+                ระบบ
+              </Text>
+            </TouchableOpacity>
+
+            {/* Dark */}
+            <TouchableOpacity
+              style={[styles.themePill, override === 'dark' && styles.themePillActive]}
+              onPress={() => setOverride('dark')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="moon-outline"
+                size={16}
+                color={override === 'dark' ? colors.text.inverse : colors.text.secondary}
+              />
+              <Text style={[styles.themePillText, override === 'dark' && styles.themePillTextActive]}>
+                มืด
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.fieldHint}>
+            {override === null ? 'ใช้ธีมตามการตั้งค่าของระบบ' : override === 'dark' ? 'ธีมมืด (บันทึกแล้ว)' : 'ธีมสว่าง (บันทึกแล้ว)'}
+          </Text>
+        </View>
+
         {/* App info */}
-        <Text style={styles.version}>EasyShop POS v1.0</Text>
+        <Text style={styles.version}>QRForPay POS v1.0</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   keyboardView: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
     paddingBottom: 40,
   },
   section: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...shadow.md,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -284,7 +341,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   field: {
     marginBottom: 14,
@@ -292,26 +349,27 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     marginBottom: 6,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 15,
-    color: Colors.text.primary,
-    backgroundColor: Colors.surface,
+    color: colors.text.primary,
+    backgroundColor: colors.background,
   },
   inputReadOnly: {
-    backgroundColor: Colors.background,
-    color: Colors.text.secondary,
+    backgroundColor: colors.borderLight,
+    color: colors.text.secondary,
+    borderColor: colors.borderLight,
   },
   fieldHint: {
     fontSize: 11,
-    color: Colors.text.light,
+    color: colors.text.light,
     marginTop: 4,
   },
   readOnlyNotice: {
@@ -321,36 +379,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    borderTopColor: colors.borderLight,
   },
   readOnlyText: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
   },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    height: 52,
     marginBottom: 16,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    ...shadow.md,
   },
   saveButtonDisabled: {
-    backgroundColor: Colors.text.light,
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.45,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.surface,
+    color: colors.text.inverse,
   },
   infoRow: {
     flexDirection: 'row',
@@ -358,7 +410,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: colors.borderLight,
   },
   infoRowLast: {
     borderBottomWidth: 0,
@@ -366,12 +418,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   infoValue: {
     fontSize: 14,
-    color: Colors.text.primary,
+    color: colors.text.primary,
     fontWeight: '500',
     maxWidth: '60%',
     textAlign: 'right',
@@ -381,25 +433,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   roleText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   roleTextOwner: {
-    color: Colors.primary,
+    color: colors.primary,
+  },
+  // Dark mode toggle
+  themeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  themePill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  themePillActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  themePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  themePillTextActive: {
+    color: colors.text.inverse,
   },
   version: {
     textAlign: 'center',
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
     marginTop: 8,
   },
 });

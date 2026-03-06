@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { QRPaymentModal } from '../components/QRPaymentModal';
-import { Colors } from '../constants/colors';
 import { useOrderStore } from '../src/store/orderStore';
 import { useAuthStore } from '../src/store/authStore';
 import { useCartStore } from '../src/store/cartStore';
+import { useTheme, ThemeColors } from '../constants/ThemeContext';
 
 export default function QRPaymentScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const currentOrder = useOrderStore((s) => s.currentOrder);
   const subscribeToOrder = useOrderStore((s) => s.subscribeToOrder);
@@ -65,7 +68,7 @@ export default function QRPaymentScreen() {
   if (!orderId || !currentOrder) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading order...</Text>
       </View>
     );
@@ -91,10 +94,10 @@ export default function QRPaymentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
   },
   center: {
     justifyContent: 'center',
@@ -103,6 +106,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
 });

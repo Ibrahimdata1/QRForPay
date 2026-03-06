@@ -2,10 +2,10 @@ import '../global.css';
 import { useEffect } from 'react';
 import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Colors } from '../constants/colors';
 import { useAuthStore } from '../src/store/authStore';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
+import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 
 // Routes that are public and must render immediately without auth initialization.
 // These are served to end-customers via QR code and must never be blocked by
@@ -16,7 +16,8 @@ function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((prefix) => pathname.startsWith(prefix));
 }
 
-export default function RootLayout() {
+function AppShell() {
+  const { colors, isDark } = useTheme();
   // Preload Ionicons font so tab-bar icons render correctly on web.
   useFonts(Ionicons.font);
 
@@ -58,11 +59,11 @@ export default function RootLayout() {
   // never bare-white between route transitions.
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: Colors.background },
+          contentStyle: { backgroundColor: colors.background },
         }}
       >
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
@@ -78,5 +79,13 @@ export default function RootLayout() {
         />
       </Stack>
     </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <AppShell />
+    </ThemeProvider>
   );
 }

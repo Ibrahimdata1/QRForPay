@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { shadow, radius } from '../../constants/theme';
 import { CartItem } from '../../components/CartItem';
 import {
   useCartStore,
@@ -25,8 +26,11 @@ import {
 } from '../../src/store/cartStore';
 import { useOrderStore } from '../../src/store/orderStore';
 import { useAuthStore } from '../../src/store/authStore';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 
 export default function CartScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useCartStore((s) => s.items);
   const discount = useCartStore((s) => s.discount);
   const taxRate = useCartStore((s) => s.taxRate);
@@ -279,7 +283,7 @@ export default function CartScreen() {
     <View style={styles.container}>
       {isCreatingOrder && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>กำลังสร้างออเดอร์...</Text>
         </View>
       )}
@@ -295,15 +299,14 @@ export default function CartScreen() {
       {/* Table number input */}
       {!resumeOrderId && (
         <View style={styles.tableRow}>
-          <Ionicons name="grid-outline" size={18} color={Colors.text.secondary} />
+          <Ionicons name="grid-outline" size={18} color={colors.text.secondary} />
           <TextInput
             style={styles.tableInput}
             placeholder="หมายเลขโต๊ะ (ไม่บังคับ)"
-            placeholderTextColor={Colors.text.light}
+            placeholderTextColor={colors.text.light}
             value={tableNumber}
             onChangeText={setTableNumber}
             keyboardType="default"
-            returnKeyType="done"
             maxLength={10}
           />
         </View>
@@ -315,7 +318,7 @@ export default function CartScreen() {
             {items.length} รายการ
           </Text>
           <TouchableOpacity onPress={handleClearCart} style={styles.clearButton}>
-            <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+            <Ionicons name="trash-outline" size={16} color={colors.danger} />
             <Text style={styles.clearButtonText}>ล้างตะกร้า</Text>
           </TouchableOpacity>
         </View>
@@ -359,7 +362,7 @@ export default function CartScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="cart-outline" size={64} color={Colors.text.light} />
+            <Ionicons name="cart-outline" size={64} color={colors.text.light} />
             <Text style={styles.emptyText}>ตะกร้าว่าง</Text>
           </View>
         }
@@ -380,12 +383,12 @@ export default function CartScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.discountLeft}>
-            <Ionicons name="pricetag-outline" size={16} color={discount > 0 ? Colors.danger : Colors.text.light} />
-            <Text style={[styles.summaryLabel, discount > 0 && { color: Colors.danger }]}>
+            <Ionicons name="pricetag-outline" size={16} color={discount > 0 ? colors.danger : colors.text.light} />
+            <Text style={[styles.summaryLabel, discount > 0 && { color: colors.danger }]}>
               {discount > 0 ? `ส่วนลด -฿${discountAmount.toFixed(0)}` : 'เพิ่มส่วนลด'}
             </Text>
           </View>
-          <Text style={[styles.summaryValue, discount > 0 && { color: Colors.danger }]}>
+          <Text style={[styles.summaryValue, discount > 0 && { color: colors.danger }]}>
             {discount > 0 ? `-฿${discountAmount.toFixed(2)}` : '—'}
           </Text>
         </TouchableOpacity>
@@ -413,7 +416,7 @@ export default function CartScreen() {
             <Ionicons
               name="qr-code-outline"
               size={16}
-              color={paymentMethod === 'qr' ? '#FFFFFF' : Colors.text.secondary}
+              color={paymentMethod === 'qr' ? '#FFFFFF' : colors.text.secondary}
             />
             <Text style={[
               styles.methodPillText,
@@ -434,7 +437,7 @@ export default function CartScreen() {
             <Ionicons
               name="cash-outline"
               size={16}
-              color={paymentMethod === 'cash' ? '#FFFFFF' : Colors.text.secondary}
+              color={paymentMethod === 'cash' ? '#FFFFFF' : colors.text.secondary}
             />
             <Text style={[
               styles.methodPillText,
@@ -455,8 +458,7 @@ export default function CartScreen() {
               onChangeText={setCashReceived}
               keyboardType="numeric"
               placeholder="0"
-              placeholderTextColor={Colors.text.light}
-              returnKeyType="done"
+              placeholderTextColor={colors.text.light}
             />
             {cashReceivedNum > 0 && change >= 0 && (
               <Text style={styles.changeText}>
@@ -481,21 +483,28 @@ export default function CartScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Pay button */}
+          {/* Pay button — LinearGradient CTA */}
           <TouchableOpacity
-            style={[styles.payButton, (items.length === 0 || isCreatingOrder) && styles.actionButtonDisabled]}
+            style={[(items.length === 0 || isCreatingOrder) && styles.actionButtonDisabled, styles.payButtonWrapper]}
             onPress={handlePayment}
             disabled={items.length === 0 || isCreatingOrder}
             activeOpacity={0.85}
           >
-            <Ionicons
-              name={paymentMethod === 'qr' ? 'qr-code' : 'cash'}
-              size={20}
-              color="#FFFFFF"
-            />
-            <Text style={styles.payButtonText}>
-              {`ชำระ ฿${effectiveTotal.toFixed(0)}`}
-            </Text>
+            <LinearGradient
+              colors={colors.gradient.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.payButton}
+            >
+              <Ionicons
+                name={paymentMethod === 'qr' ? 'qr-code' : 'cash'}
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={styles.payButtonText}>
+                {`ชำระ ฿${effectiveTotal.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -571,7 +580,7 @@ export default function CartScreen() {
                 onChangeText={setDiscountInput}
                 keyboardType="numeric"
                 placeholder="0"
-                placeholderTextColor={Colors.text.light}
+                placeholderTextColor={colors.text.light}
                 maxLength={discountType === 'percent' ? 3 : 7}
                 autoFocus
               />
@@ -602,10 +611,10 @@ export default function CartScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -621,7 +630,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   resumeBanner: {
     flexDirection: 'row',
@@ -645,14 +654,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 6,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   tableInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text.primary,
+    color: colors.text.primary,
     height: 36,
   },
   topBar: {
@@ -665,7 +674,7 @@ const styles = StyleSheet.create({
   },
   itemCountText: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   clearButton: {
@@ -677,7 +686,7 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 13,
-    color: Colors.danger,
+    color: colors.danger,
     fontWeight: '600',
   },
   listContent: {
@@ -691,21 +700,15 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: Colors.text.light,
+    color: colors.text.light,
     marginTop: 12,
   },
   summaryContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
     padding: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 8,
-    borderTopWidth: 1,
-    borderColor: Colors.border,
+    ...shadow.bottom,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -715,27 +718,29 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   summaryValue: {
     fontSize: 14,
-    color: Colors.text.primary,
+    color: colors.text.primary,
     fontWeight: '500',
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginVertical: 8,
   },
   totalLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
   },
   totalValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'] as any,
   },
   // Payment method selector
   methodRow: {
@@ -754,12 +759,12 @@ const styles = StyleSheet.create({
     borderRadius: 21,
   },
   methodPillActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   methodPillInactive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   methodPillText: {
     fontSize: 14,
@@ -769,11 +774,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   methodPillTextInactive: {
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   // Cash received section
   cashSection: {
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 12,
     marginTop: 10,
@@ -781,21 +786,21 @@ const styles = StyleSheet.create({
   },
   cashLabel: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   cashInput: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     borderBottomWidth: 2,
-    borderBottomColor: Colors.primary,
+    borderBottomColor: colors.primary,
     paddingBottom: 4,
   },
   changeText: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.success,
+    color: colors.success,
     marginTop: 2,
   },
   // Action buttons row
@@ -806,9 +811,9 @@ const styles = StyleSheet.create({
   },
   saveOrderButton: {
     flex: 1,
-    backgroundColor: Colors.success,
-    borderRadius: 14,
-    height: 54,
+    backgroundColor: colors.success,
+    borderRadius: radius.md,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -819,20 +824,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  payButton: {
+  payButtonWrapper: {
     flex: 1,
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    height: 54,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    ...shadow.md,
+  },
+  payButton: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 5,
+    gap: 8,
+    borderRadius: radius.md,
   },
   actionButtonDisabled: {
     opacity: 0.5,
@@ -850,9 +854,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1.5,
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
     borderRadius: 10,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     opacity: 0.9,
   },
   discountLeft: {
@@ -862,22 +866,23 @@ const styles = StyleSheet.create({
   },
   discountOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(15,23,42,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
   },
   discountSheet: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     padding: 24,
     width: '100%',
     alignItems: 'center',
+    ...shadow.lg,
   },
   discountTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     marginBottom: 14,
   },
   discountTypeRow: {
@@ -893,12 +898,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   discountTypePillActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   discountTypePillInactive: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   discountTypePillText: {
     fontSize: 16,
@@ -908,13 +913,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   discountTypePillTextInactive: {
-    color: Colors.text.secondary,
+    color: colors.text.secondary,
   },
   discountInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     borderRadius: 14,
     paddingHorizontal: 20,
     height: 60,
@@ -923,18 +928,18 @@ const styles = StyleSheet.create({
   discountInput: {
     fontSize: 32,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: colors.text.primary,
     minWidth: 60,
     textAlign: 'center',
   },
   discountPercent: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.primary,
+    color: colors.primary,
   },
   discountHint: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
     marginTop: 6,
     marginBottom: 20,
     textAlign: 'center',
@@ -956,13 +961,13 @@ const styles = StyleSheet.create({
   discountClearText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.danger,
+    color: colors.danger,
   },
   discountApplyBtn: {
     flex: 2,
     height: 48,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../constants/colors';
+import { shadow, radius } from '../constants/theme';
+import { useTheme, ThemeColors } from '../constants/ThemeContext';
 
 interface CartItemProps {
   name: string;
@@ -19,6 +21,8 @@ export function CartItem({
   onDecrement,
   onRemove,
 }: CartItemProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const subtotal = price * quantity;
 
   return (
@@ -29,14 +33,14 @@ export function CartItem({
         <Text style={styles.unitPrice}>฿{price.toFixed(0)} / ชิ้น</Text>
       </View>
 
-      {/* Qty controls */}
-      <View style={styles.qtyRow}>
+      {/* Qty controls — pill container */}
+      <View style={styles.qtyPill}>
         <TouchableOpacity style={styles.qtyBtn} onPress={onDecrement} activeOpacity={0.7}>
-          <Ionicons name="remove" size={15} color={Colors.text.secondary} />
+          <Ionicons name="remove" size={14} color={colors.text.secondary} />
         </TouchableOpacity>
         <Text style={styles.qty}>{quantity}</Text>
         <TouchableOpacity style={styles.qtyBtn} onPress={onIncrement} activeOpacity={0.7}>
-          <Ionicons name="add" size={15} color={Colors.text.secondary} />
+          <Ionicons name="add" size={14} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -45,75 +49,76 @@ export function CartItem({
 
       {/* Delete */}
       <TouchableOpacity onPress={onRemove} style={styles.deleteBtn} activeOpacity={0.7}>
-        <Ionicons name="trash-outline" size={17} color={Colors.danger} />
+        <Ionicons name="trash-outline" size={17} color={colors.danger} />
       </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
     paddingHorizontal: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadow.sm,
   },
   info: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 10,
   },
   name: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: 2,
+    color: colors.text.primary,
+    marginBottom: 3,
+    lineHeight: 20,
   },
   unitPrice: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: colors.text.light,
   },
-  qtyRow: {
+  // Pill container wrapping minus - number - plus
+  qtyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.full,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 2,
   },
   qtyBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
+    ...shadow.sm,
   },
   qty: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: Colors.text.primary,
-    minWidth: 22,
+    color: colors.text.primary,
+    minWidth: 24,
     textAlign: 'center',
   },
   total: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.primary,
-    minWidth: 62,
+    color: colors.primary,
+    minWidth: 60,
     textAlign: 'right',
     marginLeft: 10,
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'] as any,
   },
   deleteBtn: {
     padding: 6,
-    marginLeft: 6,
+    marginLeft: 4,
   },
 });
