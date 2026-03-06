@@ -1,5 +1,5 @@
 import '../global.css';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, Redirect, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
@@ -35,11 +35,20 @@ function AppShell() {
   }, []);
 
   const profile = useAuthStore((s) => s.profile);
+  const hasRedirected = useRef(false);
 
-  // Compute redirect target (render-based via <Redirect> to avoid timing issues)
+  // Reset redirect flag when auth state changes (login/logout/role change)
+  const authKey = `${user?.id ?? 'none'}-${profile?.role ?? 'none'}`;
+  const prevAuthKey = useRef(authKey);
+  if (prevAuthKey.current !== authKey) {
+    prevAuthKey.current = authKey;
+    hasRedirected.current = false;
+  }
+
+  // Compute redirect target — only on initial load or auth state change
   const isPublic = isPublicRoute(pathname);
   let redirectTarget: string | null = null;
-  if (!isPublic && isInitialized) {
+  if (!isPublic && isInitialized && !hasRedirected.current) {
     if (!user) {
       redirectTarget = '/(auth)/login';
     } else if (profile === null || profile.role === null) {
@@ -53,6 +62,13 @@ function AppShell() {
 
   // Avoid redirecting if we're already on the target path
   const alreadyThere = redirectTarget && pathname.includes(redirectTarget.replace('/(pos)', '').replace('/(auth)', ''));
+
+  // Mark as redirected once we actually redirect (or already there)
+  if (redirectTarget && !alreadyThere) {
+    hasRedirected.current = true;
+  } else if (redirectTarget && alreadyThere) {
+    hasRedirected.current = true;
+  }
 
   return (
     <>

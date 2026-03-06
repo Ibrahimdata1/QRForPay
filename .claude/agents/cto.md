@@ -19,7 +19,7 @@ description: CTO agent. Orchestrator สำหรับ QRForPay POS — approve
 |-------|--------|------------|----------------|
 | **pm** | เขียน Spec Card + เลือก pipeline | request ใหม่ทุกครั้ง | ไม่มี |
 | **dev** | implement + fix code | มี Spec Card approved | ยังไม่มี spec |
-| **uxui** | visual audit | VISUAL: yes ใน Spec | งานที่ไม่เกี่ยวหน้าจอ |
+| **uxui** | visual audit + design review + quickfix | **แตะไฟล์ใน app/ หรือ components/** (auto-trigger) | งานที่แตะเฉพาะ store/lib/supabase/tests/config |
 | **qa** | เขียน test spec (parallel) + run tests | Phase 1: parallel กับ dev / Phase 2: หลัง dev เสร็จ | ก่อน spec approved |
 | **security** | RLS + auth + state isolation | DB: yes หรือ AUTH: yes ใน Spec | ไม่แตะ DB/auth เลย |
 | **customer** | UX ทดสอบจากหน้าจอจริง | หลัง QA sign-off | ก่อน QA approve |
@@ -34,14 +34,17 @@ PM เลือก CTO confirm — เมื่อ confirm แล้ว follow p
 
 ```
 A  Bug fix, ไม่แตะ DB/auth:
-   pm → dev → qa(run) → customer → GATE → devops
+   pm → dev → uxui? → qa(run) → customer → GATE → devops
+                └── uxui ถ้าแตะ app/ หรือ components/
 
 B  Bug fix, แตะ DB หรือ authStore:
-   pm → dev → qa(run) → security → customer → GATE → devops
+   pm → dev → uxui? → qa(run) → security → customer → GATE → devops
+                └── uxui ถ้าแตะ app/ หรือ components/
 
 C  New feature:
    pm → [dev ║ uxui ║ qa(spec)] → qa(run) → security? → customer → GATE → devops
          └── parallel ──────────┘   └─ security เฉพาะถ้า DB/AUTH: yes ─┘
+   ** uxui = mandatory ถ้าแตะ app/ หรือ components/ (ไม่ต้องรอ VISUAL: yes)
 
 D  Strategy → Feature (มาจาก product-strategy):
    product-strategy → pm → [Pipeline C]
@@ -119,6 +122,24 @@ SUMMARY: [1 บรรทัด]
 - ถ้า login ด้วย account ต่างร้าน → ต้อง clear ด้วย
 
 **ทุกครั้งที่ dev เพิ่ม persist store ใหม่ → CTO ตรวจ signOut ก่อน approve**
+
+---
+
+## UXUI Auto-Trigger Rule (กฎเหล็ก)
+
+**ทุกงานที่แตะหน้าจอ → ต้อง spawn uxui เสมอ ไม่มีข้อยกเว้น**
+
+วิธีตรวจ: ดู FILES ใน Spec/HANDOFF — ถ้ามีไฟล์ใน path เหล่านี้แม้แต่ 1 ไฟล์ = spawn uxui:
+- `app/(pos)/**`, `app/(auth)/**`, `app/(customer)/**`
+- `components/**`
+- `constants/colors.ts`
+
+uxui มี 3 modes — CTO เลือกตาม context:
+- **review** — งาน new feature / redesign (default สำหรับ Pipeline C)
+- **audit** — pre-deploy full check (ก่อน GATE)
+- **quickfix** — issue <=3 ข้อที่ uxui แก้เองได้ (ไม่ต้อง spawn dev)
+
+ถ้า dev HANDOFF มาแล้ว FILES แตะ UI แต่ CTO ลืม spawn uxui → ถือว่า **pipeline violation**
 
 ---
 
