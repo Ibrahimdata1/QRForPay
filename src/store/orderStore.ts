@@ -37,6 +37,11 @@ interface OrderState {
   cancelOrder: (orderId: string, cancelledBy: string, reason?: string) => Promise<void>
   cancelOrderItem: (orderId: string, itemId: string, cancelledBy: string) => Promise<void>
   fetchOrders: (shopId: string, limit?: number) => Promise<void>
+  // Order history (completed + cancelled)
+  historyOrders: OrderWithItems[]
+  historyTotal: number
+  historyLoading: boolean
+  fetchOrderHistory: (shopId: string, dateRange: { start: string; end: string }, statusFilter?: 'all' | 'completed' | 'cancelled', limit?: number, offset?: number) => Promise<void>
   subscribeToOrder: (orderId: string) => () => void
 }
 
@@ -57,6 +62,9 @@ export const useOrderStore = create<OrderState>()(
     setAlertInfo: (info) => {
       set((state) => { state.alertInfo = info })
     },
+    historyOrders: [],
+    historyTotal: 0,
+    historyLoading: false,
 
     createOrder: async (
       shopId: string,
@@ -471,6 +479,47 @@ export const useOrderStore = create<OrderState>()(
           state.isLoading = false
           state.fetchError = err?.message ?? 'โหลดรายการออเดอร์ไม่ได้ กรุณาตรวจสอบสัญญาณอินเทอร์เน็ต'
         })
+      }
+    },
+
+    fetchOrderHistory: async (shopId: string, dateRange: { start: string; end: string }, statusFilter: 'all' | 'completed' | 'cancelled' = 'all', limit: number = 15, offset: number = 0) => {
+      set((state) => { state.historyLoading = true })
+
+      try {
+        let query = supabase
+          .from('orders')
+          .select('*, items:order_items(*, product:products(name), item_cancelled_by_profile:profiles!order_items_item_cancelled_by_fkey(full_name)), payment:payments(*, confirmed_by_profile:profiles!payments_confirmed_by_fkey(full_name)), cancelled_by_profile:profiles!orders_cancelled_by_fkey(full_name)', { count: 'exact' })
+          .eq('shop_id', shopId)
+          .gte('created_at', dateRange.start)
+          .lt('created_at', dateRange.end)
+
+        if (statusFilter === 'all') {
+          query = query.in('status', ['completed', 'cancelled'])
+        } else {
+          query = query.eq('status', statusFilter)
+        }
+
+        const { data, error, count } = await query
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1)
+
+        if (error) throw error
+
+        const mapped = (data || []).map((o: any) => {
+          const rawPayment = Array.isArray(o.payment) ? o.payment[0] : o.payment
+          const confirmedByProfile = rawPayment?.confirmed_by_profile ?? undefined
+          const payment = rawPayment ? { ...rawPayment, confirmed_by_profile: undefined } : undefined
+          const cancelledByProfile = o.cancelled_by_profile ?? undefined
+          return { ...o, payment, confirmedByProfile, cancelledByProfile, cancelled_by_profile: undefined }
+        }) as OrderWithItems[]
+
+        set((state) => {
+          state.historyOrders = offset === 0 ? mapped : [...state.historyOrders, ...mapped]
+          state.historyTotal = count ?? 0
+          state.historyLoading = false
+        })
+      } catch (err: any) {
+        set((state) => { state.historyLoading = false })
       }
     },
 

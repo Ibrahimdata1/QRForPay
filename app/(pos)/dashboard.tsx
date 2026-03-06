@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
 import { shadow, radius } from '../../constants/theme';
@@ -49,14 +50,14 @@ export default function DashboardScreen() {
     setFetchError(null);
 
     try {
-      // Fetch completed orders for today
+      // Fetch completed orders for today (by completed_at, not created_at)
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select('id, total_amount')
         .eq('shop_id', shop.id)
         .eq('status', 'completed')
-        .gte('created_at', startOfDay)
-        .lt('created_at', endOfDay);
+        .gte('completed_at', startOfDay)
+        .lt('completed_at', endOfDay);
 
       if (ordersError) throw ordersError;
 
@@ -117,9 +118,12 @@ export default function DashboardScreen() {
     }
   }, [shop?.id]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Re-fetch every time the tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

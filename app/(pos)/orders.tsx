@@ -62,12 +62,22 @@ export default function OrdersScreen() {
   const fetchError = useOrderStore((s) => s.fetchError);
   const newOrderIds = useOrderStore((s) => s.newOrderIds);
   const clearNewOrderIds = useOrderStore((s) => s.clearNewOrderIds);
+  const historyOrders = useOrderStore((s) => s.historyOrders);
+  const historyTotal = useOrderStore((s) => s.historyTotal);
+  const historyLoading = useOrderStore((s) => s.historyLoading);
+  const fetchOrderHistory = useOrderStore((s) => s.fetchOrderHistory);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
   const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  // History section state
+  const [historyDateRange, setHistoryDateRange] = useState<'today' | 'yesterday' | '7days' | '30days'>('today');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'completed' | 'cancelled'>('all');
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const HISTORY_PAGE_SIZE = 15;
   const [billPayModal, setBillPayModal] = useState<{
     tableNumber: string;
     orders: OrderWithItems[];
@@ -76,10 +86,30 @@ export default function OrdersScreen() {
     cashInput: string;
   } | null>(null);
 
+  const getDateRange = useCallback((range: 'today' | 'yesterday' | '7days' | '30days') => {
+    const now = new Date();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    switch (range) {
+      case 'today': return { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(), end: endOfToday.toISOString() };
+      case 'yesterday': { const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); return { start: y.toISOString(), end: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString() }; }
+      case '7days': { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6); return { start: d.toISOString(), end: endOfToday.toISOString() }; }
+      case '30days': { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29); return { start: d.toISOString(), end: endOfToday.toISOString() }; }
+    }
+  }, []);
+
+  const refreshHistory = useCallback((range?: typeof historyDateRange, status?: typeof historyStatusFilter) => {
+    if (!shop?.id) return;
+    const r = range ?? historyDateRange;
+    const s = status ?? historyStatusFilter;
+    setHistoryOffset(0);
+    fetchOrderHistory(shop.id, getDateRange(r), s, HISTORY_PAGE_SIZE, 0);
+  }, [shop?.id, historyDateRange, historyStatusFilter, getDateRange]);
+
   useFocusEffect(
     useCallback(() => {
       if (shop?.id) {
         fetchOrders(shop.id);
+        fetchOrderHistory(shop.id, getDateRange(historyDateRange), historyStatusFilter, HISTORY_PAGE_SIZE, 0);
       }
     }, [shop?.id])
   );
@@ -474,6 +504,41 @@ export default function OrdersScreen() {
           <Text style={styles.errorBannerText}>{fetchError}</Text>
         </View>
       ) : null}
+
+      {/* ===== Tab Switcher ===== */}
+      <View style={styles.tabSwitcher}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'active' && styles.tabItemActive]}
+          onPress={() => setActiveTab('active')}
+        >
+          <Text style={[styles.tabLabel, activeTab === 'active' && styles.tabLabelActive]}>
+            กำลังดำเนินการ
+          </Text>
+          {pendingOrders.length > 0 && (
+            <View style={[styles.tabBadge, activeTab !== 'active' && pendingOrders.length > 0 && styles.tabBadgeAlert]}>
+              <Text style={[styles.tabBadgeText, activeTab !== 'active' && pendingOrders.length > 0 && styles.tabBadgeAlertText]}>
+                {pendingOrders.length}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'history' && styles.tabItemActive]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Text style={[styles.tabLabel, activeTab === 'history' && styles.tabLabelActive]}>
+            ประวัติ
+          </Text>
+          {historyTotal > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{historyTotal}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* ===== Tab Content: กำลังดำเนินการ ===== */}
+      {activeTab === 'active' ? (
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
@@ -819,6 +884,224 @@ export default function OrdersScreen() {
           <Text style={styles.emptyInlineText}>ไม่มีโต๊ะที่มีออเดอร์ค้างอยู่</Text>
         )}
       </ScrollView>
+      ) : (
+      /* ===== Tab Content: ประวัติ ===== */
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (!shop?.id) return;
+              setRefreshing(true);
+              fetchOrderHistory(shop.id, getDateRange(historyDateRange), historyStatusFilter, HISTORY_PAGE_SIZE, 0)
+                .finally(() => setRefreshing(false));
+            }}
+          />
+        }
+      >
+        {/* ===== Section 3: ประวัติออเดอร์ ===== */}
+        {/* Date range pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 8 }}>
+          {([
+            { key: 'today' as const, label: 'วันนี้' },
+            { key: 'yesterday' as const, label: 'เมื่อวาน' },
+            { key: '7days' as const, label: '7 วัน' },
+            { key: '30days' as const, label: '30 วัน' },
+          ]).map(d => (
+            <TouchableOpacity
+              key={d.key}
+              style={[styles.filterPill, historyDateRange === d.key ? styles.filterPillActive : styles.filterPillInactive]}
+              onPress={() => { setHistoryDateRange(d.key); refreshHistory(d.key); }}
+            >
+              <Text style={[styles.filterPillText, historyDateRange === d.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                {d.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Status filter pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 12 }}>
+          {([
+            { key: 'all' as const, label: 'ทั้งหมด' },
+            { key: 'completed' as const, label: 'เสร็จสิ้น' },
+            { key: 'cancelled' as const, label: 'ยกเลิก' },
+          ]).map(s => (
+            <TouchableOpacity
+              key={s.key}
+              style={[styles.filterPill, historyStatusFilter === s.key ? styles.filterPillActive : styles.filterPillInactive]}
+              onPress={() => { setHistoryStatusFilter(s.key); refreshHistory(undefined, s.key); }}
+            >
+              <Text style={[styles.filterPillText, historyStatusFilter === s.key ? styles.filterPillTextActive : styles.filterPillTextInactive]}>
+                {s.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Summary bar */}
+        {historyOrders.length > 0 && (
+          <View style={styles.historySummary}>
+            <View style={styles.historySummaryItem}>
+              <Text style={styles.historySummaryValue}>
+                ฿{historyOrders.filter(o => o.status === 'completed').reduce((s, o) => s + (o.total_amount ?? 0), 0).toLocaleString('th-TH')}
+              </Text>
+              <Text style={styles.historySummaryLabel}>ยอดขาย</Text>
+            </View>
+            <View style={styles.historySummaryDivider} />
+            <View style={styles.historySummaryItem}>
+              <Text style={styles.historySummaryValue}>
+                {historyOrders.filter(o => o.status === 'completed' && o.payment?.method === 'cash').length}
+              </Text>
+              <Text style={styles.historySummaryLabel}>เงินสด</Text>
+            </View>
+            <View style={styles.historySummaryDivider} />
+            <View style={styles.historySummaryItem}>
+              <Text style={styles.historySummaryValue}>
+                {historyOrders.filter(o => o.status === 'completed' && o.payment?.method === 'qr').length}
+              </Text>
+              <Text style={styles.historySummaryLabel}>โอน/QR</Text>
+            </View>
+            <View style={styles.historySummaryDivider} />
+            <View style={styles.historySummaryItem}>
+              <Text style={[styles.historySummaryValue, { color: '#EF4444' }]}>
+                {historyOrders.filter(o => o.status === 'cancelled').length}
+              </Text>
+              <Text style={styles.historySummaryLabel}>ยกเลิก</Text>
+            </View>
+          </View>
+        )}
+
+        {/* History cards */}
+        {historyLoading && historyOrders.length === 0 ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ paddingVertical: 24 }} />
+        ) : historyOrders.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingVertical: 32, gap: 10 }}>
+            <Ionicons name="receipt-outline" size={48} color={colors.text.light} />
+            <Text style={{ fontSize: 14, color: colors.text.secondary }}>ยังไม่มีประวัติออเดอร์</Text>
+          </View>
+        ) : (
+          historyOrders.map((order) => {
+            const isCancelled = order.status === 'cancelled';
+            const accentColor = isCancelled ? '#EF4444' : '#10B981';
+            const confirmType = order.payment?.confirmation_type;
+            const confirmedName = order.confirmedByProfile?.full_name;
+            const cancelledName = order.cancelledByProfile?.full_name;
+            const methodIcon = order.payment?.method === 'cash' ? 'cash-outline' : 'card-outline';
+            const methodLabel = methodLabels[order.payment?.method ?? ''] ?? '';
+            const itemCount = order.items?.filter((i: any) => (i.item_status ?? 'active') === 'active').length ?? 0;
+
+            return (
+              <TouchableOpacity
+                key={order.id}
+                style={[styles.orderCard, isCancelled && { opacity: 0.7 }]}
+                activeOpacity={0.7}
+                onPress={() => setSelectedOrder(order)}
+              >
+                <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+                <View style={styles.cardBody}>
+                  {/* Header: order number + status */}
+                  <View style={styles.orderHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={styles.orderNumber}>#{order.order_number}</Text>
+                      {order.table_number ? (
+                        <View style={styles.tableTagSmall}>
+                          <Text style={styles.tableTagText}>โต๊ะ {order.table_number}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: (statusColors[order.status] ?? '#9CA3AF') + '20' }]}>
+                      <Text style={[styles.statusText, { color: statusColors[order.status] ?? '#9CA3AF' }]}>
+                        {statusLabels[order.status] ?? order.status}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Meta: time, items, method */}
+                  <View style={styles.orderMeta}>
+                    <View style={styles.detailRow}>
+                      <Ionicons name="time-outline" size={13} color={colors.text.light} />
+                      <Text style={styles.detailText}>
+                        {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Ionicons name="cart-outline" size={13} color={colors.text.light} />
+                      <Text style={styles.detailText}>{itemCount} รายการ</Text>
+                    </View>
+                    {methodLabel ? (
+                      <View style={styles.detailRow}>
+                        <Ionicons name={methodIcon as any} size={13} color={colors.text.light} />
+                        <Text style={styles.detailText}>{methodLabel}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Confirmation badge */}
+                  {!isCancelled && confirmType === 'manual' && confirmedName ? (
+                    <View style={[styles.confirmBadge, styles.confirmBadgeManual]}>
+                      <Ionicons name="person-outline" size={12} color="#D97706" />
+                      <Text style={[styles.confirmBadgeText, { color: '#D97706' }]}>
+                        ยืนยันโดย {confirmedName}
+                      </Text>
+                    </View>
+                  ) : !isCancelled && confirmType === 'auto' ? (
+                    <View style={[styles.confirmBadge, styles.confirmBadgeAuto]}>
+                      <Ionicons name="flash-outline" size={12} color={colors.primary} />
+                      <Text style={[styles.confirmBadgeText, { color: colors.primary }]}>Auto</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Cancelled by badge */}
+                  {isCancelled && cancelledName ? (
+                    <View style={[styles.confirmBadge, { backgroundColor: '#FEF2F2' }]}>
+                      <Ionicons name="close-circle-outline" size={12} color="#DC2626" />
+                      <Text style={[styles.confirmBadgeText, { color: '#DC2626' }]}>
+                        ยกเลิกโดย {cancelledName}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Footer: total */}
+                  <View style={[styles.orderFooter, { marginTop: 8 }]}>
+                    <Text style={styles.totalLabel}>ยอดรวม</Text>
+                    <Text style={[
+                      styles.totalAmount,
+                      isCancelled && { textDecorationLine: 'line-through', color: colors.text.light },
+                    ]}>
+                      ฿{(order.total_amount ?? 0).toLocaleString('th-TH')}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+
+        {/* Load more button */}
+        {historyOrders.length < historyTotal && (
+          <TouchableOpacity
+            style={styles.loadMoreBtn}
+            onPress={() => {
+              if (!shop?.id) return;
+              const newOffset = historyOffset + HISTORY_PAGE_SIZE;
+              setHistoryOffset(newOffset);
+              fetchOrderHistory(shop.id, getDateRange(historyDateRange), historyStatusFilter, HISTORY_PAGE_SIZE, newOffset);
+            }}
+          >
+            {historyLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={styles.loadMoreText}>
+                โหลดเพิ่ม ({historyOrders.length}/{historyTotal})
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+      )}
       <OrderDetailModal
         visible={selectedOrder !== null}
         order={selectedOrder}
@@ -1460,6 +1743,97 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // Tab switcher
+  tabSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: colors.primary,
+  },
+  tabLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  tabLabelActive: {
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  tabBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  tabBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  tabBadgeAlert: {
+    backgroundColor: '#EF4444',
+  },
+  tabBadgeAlertText: {
+    color: '#FFFFFF',
+  },
+  // History section
+  historySummary: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: 12,
+    ...shadow.sm,
+  },
+  historySummaryItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  historySummaryValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  historySummaryLabel: {
+    fontSize: 11,
+    color: colors.text.light,
+    fontWeight: '500',
+  },
+  historySummaryDivider: {
+    width: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 2,
+  },
+  loadMoreBtn: {
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   // Section header
   sectionHeader: {

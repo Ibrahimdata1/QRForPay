@@ -624,7 +624,7 @@ export default function TablesScreen() {
                       ) : (
                         <View style={styles.payBtnRow}>
                           <TouchableOpacity style={styles.payQrBtn} onPress={() => handleManualPay(order)}>
-                            <Ionicons name="phone-portrait-outline" size={14} color="#fff" />
+                            <Ionicons name="checkmark-circle-outline" size={14} color="#fff" />
                             <Text style={styles.payBtnText}>ยืนยันรับโอน</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.payCashBtn} onPress={() => handleCashPay(order)}>
