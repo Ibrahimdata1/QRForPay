@@ -254,55 +254,36 @@ export default function SettingsScreen() {
           <View style={styles.themeRow}>
             {/* Light */}
             <TouchableOpacity
-              style={[styles.themePill, override === 'light' && styles.themePillActive, override === null && !isDark && styles.themePillActive]}
+              style={[styles.themePill, !isDark && styles.themePillActive]}
               onPress={() => setOverride('light')}
               activeOpacity={0.7}
             >
               <Ionicons
                 name="sunny-outline"
                 size={16}
-                color={(override === 'light' || (override === null && !isDark)) ? colors.text.inverse : colors.text.secondary}
+                color={!isDark ? colors.text.inverse : colors.text.secondary}
               />
-              <Text style={[styles.themePillText, (override === 'light' || (override === null && !isDark)) && styles.themePillTextActive]}>
+              <Text style={[styles.themePillText, !isDark && styles.themePillTextActive]}>
                 สว่าง
-              </Text>
-            </TouchableOpacity>
-
-            {/* System */}
-            <TouchableOpacity
-              style={[styles.themePill, override === null && styles.themePillActive]}
-              onPress={() => setOverride(null)}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="phone-portrait-outline"
-                size={16}
-                color={override === null ? colors.text.inverse : colors.text.secondary}
-              />
-              <Text style={[styles.themePillText, override === null && styles.themePillTextActive]}>
-                ระบบ
               </Text>
             </TouchableOpacity>
 
             {/* Dark */}
             <TouchableOpacity
-              style={[styles.themePill, override === 'dark' && styles.themePillActive]}
+              style={[styles.themePill, isDark && styles.themePillActive]}
               onPress={() => setOverride('dark')}
               activeOpacity={0.7}
             >
               <Ionicons
                 name="moon-outline"
                 size={16}
-                color={override === 'dark' ? colors.text.inverse : colors.text.secondary}
+                color={isDark ? colors.text.inverse : colors.text.secondary}
               />
-              <Text style={[styles.themePillText, override === 'dark' && styles.themePillTextActive]}>
+              <Text style={[styles.themePillText, isDark && styles.themePillTextActive]}>
                 มืด
               </Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.fieldHint}>
-            {override === null ? 'ใช้ธีมตามการตั้งค่าของระบบ' : override === 'dark' ? 'ธีมมืด (บันทึกแล้ว)' : 'ธีมสว่าง (บันทึกแล้ว)'}
-          </Text>
         </View>
 
         {/* App info */}

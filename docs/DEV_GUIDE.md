@@ -110,7 +110,9 @@ QRForPay/
 │       └── index.ts              ← TypeScript types ทั้งหมดในโปรเจค
 │
 ├── constants/
-│   ├── colors.ts                 ← สีทั้งหมดของแอพ (เปลี่ยนธีมที่นี่)
+│   ├── colors.ts                 ← Static light palette (ใช้โดย Colors export เดิม)
+│   ├── ThemeContext.tsx          ← Light/Dark palettes + useTheme() hook + ThemeProvider
+│   ├── theme.ts                  ← Design tokens: shadow, radius, space, typography
 │   └── config.ts                 ← ค่า config เช่น tax rate
 │
 ├── supabase/
@@ -133,12 +135,15 @@ Expo Router ใช้ **ชื่อไฟล์เป็น URL** — ไม่
 
 ```
 app/login.tsx                  →  /login
-app/(pos)/index.tsx            →  /           (tab: โต๊ะสด, หน้าหลักของกลุ่ม)
-app/(pos)/cart.tsx             →  /cart       (hidden tab)
-app/(pos)/orders.tsx           →  /orders
+app/(pos)/dashboard.tsx        →  /dashboard  (tab: แดชบอร์ด)
+app/(pos)/orders.tsx           →  /orders     (tab: ออเดอร์)
+app/(pos)/products.tsx         →  /products   (tab: สินค้า)
 app/(pos)/tables.tsx           →  /tables     (tab: โต๊ะ)
+app/(pos)/settings.tsx         →  /settings   (tab: ตั้งค่า)
+app/(pos)/index.tsx            →  /           (hidden — redirect ไป /orders)
+app/(pos)/cart.tsx             →  /cart       (hidden — modal จาก POS)
 app/(customer)/customer.tsx    →  /customer   (ลูกค้าสแกน QR เปิดที่นี่)
-app/qr-payment.tsx             →  /qr-payment
+app/qr-payment.tsx             →  /qr-payment (fullScreenModal)
 ```
 
 > ⚠️ **Route Group Rule**: วงเล็บ `(name)` คือ URL-transparent — `(customer)/customer.tsx` → URL `/customer`
@@ -693,6 +698,62 @@ supabase functions deploy notify-payment  # deploy Edge Function
 supabase functions logs notify-payment    # ดู log ของ Edge Function
 supabase secrets list                     # ดู environment variables ของ Edge Function
 supabase secrets set KEY=value            # ตั้ง environment variable
+```
+
+---
+
+## Dark/Light Mode — ระบบธีม
+
+แอพรองรับ Dark/Light mode ผ่าน `ThemeContext` — ทุกหน้าต้องใช้ pattern นี้เสมอ
+
+### Pattern หลัก (บังคับทุก screen/component ใหม่)
+
+```typescript
+import { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { useTheme, ThemeColors } from '../../constants/ThemeContext';
+
+export default function MyScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // ...
+}
+
+// ✅ ถูก — อยู่นอก component
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { backgroundColor: colors.background },
+});
+
+// ❌ ผิด — StyleSheet.create ที่ module level ใช้ colors ไม่ได้
+const styles = StyleSheet.create({
+  container: { backgroundColor: colors.background }, // ReferenceError!
+});
+```
+
+### ThemeColors ที่ใช้บ่อย
+
+| Token | Light | Dark | ใช้กับอะไร |
+|-------|-------|------|-----------|
+| `colors.background` | `#F8FAFC` | `#09090B` | พื้นหลังหน้าจอ |
+| `colors.surface` | `#FFFFFF` | `#18181B` | Card, Modal, Bottom sheet |
+| `colors.border` | `#E2E8F0` | `#3F3F46` | เส้นขอบ input, divider |
+| `colors.borderLight` | `#F1F5F9` | `#27272A` | พื้นหลัง pill, subtle bg |
+| `colors.text.primary` | `#0F172A` | `#FAFAFA` | ข้อความหลัก |
+| `colors.text.secondary` | `#64748B` | `#A1A1AA` | ข้อความรอง |
+| `colors.text.light` | `#94A3B8` | `#71717A` | placeholder, hint |
+| `colors.primary` | `#0F766E` | `#14B8A6` | สี brand, ปุ่มหลัก |
+| `colors.gradient.primary` | deep teal | deep teal dark | LinearGradient hero |
+
+### ตั้งค่าธีม
+
+ผู้ใช้เปลี่ยนได้ที่ **ตั้งค่า → ธีม** (สว่าง / มืด)
+บันทึกลง AsyncStorage ด้วย key `@qrforpay:theme_override`
+
+```typescript
+const { colors, isDark, setOverride } = useTheme();
+setOverride('dark');   // บังคับ dark
+setOverride('light');  // บังคับ light
+setOverride(null);     // ตามระบบ
 ```
 
 ---
