@@ -47,6 +47,8 @@ interface MenuCategory {
 interface CartEntry {
   item: MenuItem;
   qty: number;
+  orderId?: string;
+  orderNumber?: number;
 }
 
 type ScreenState = 'loading' | 'error' | 'menu' | 'cart' | 'confirm' | 'paying' | 'success';
@@ -276,7 +278,7 @@ export default function CustomerOrderScreen() {
             setOrderNumber(latest.orderNumber);
             setOrderStatus(latest.status);
 
-            // Combine all items from all orders
+            // Combine all items from all orders (with order info for status grouping)
             const combined: CartEntry[] = rows.map((r: any) => ({
               item: {
                 id: r.product_id,
@@ -287,6 +289,8 @@ export default function CustomerOrderScreen() {
                 is_active: true,
               },
               qty: r.quantity,
+              orderId: r.order_id,
+              orderNumber: r.order_number,
             }));
             setConfirmedItems(combined);
           }
@@ -362,8 +366,6 @@ export default function CustomerOrderScreen() {
     const totalSnapshot = cartTotal;
 
     // Always create a new order (each round = separate order for POS alerts)
-    // Optimistically append cart → confirmedItems
-    setConfirmedItems(prev => [...prev, ...cartSnapshot]);
     setCart([]);
     setScreen('cart');
 
@@ -426,7 +428,14 @@ export default function CustomerOrderScreen() {
 
       if (payErr) throw payErr;
 
-      // 4. Add to tableOrders list
+      // 4. Append items to confirmed (with order info for status grouping)
+      setConfirmedItems(prev => [...prev, ...cartSnapshot.map(e => ({
+        ...e,
+        orderId: orderRow.id,
+        orderNumber: orderRow.order_number,
+      }))]);
+
+      // 5. Add to tableOrders list
       setTableOrders(prev => [...prev, {
         id: orderRow.id,
         orderNumber: orderRow.order_number,
@@ -434,13 +443,12 @@ export default function CustomerOrderScreen() {
         total: totalAmount,
       }]);
 
-      // 5. Show success — realtime subscriptions start via useEffect when orderId is set
+      // 6. Show success — realtime subscriptions start via useEffect when orderId is set
       webAlert('สั่งสำเร็จ!', 'รายการของคุณถูกส่งไปยังครัวแล้ว');
 
     } catch (err: any) {
-      // Restore cart from confirmedItems so user can retry
+      // Restore cart so user can retry
       setCart(cartSnapshot);
-      setConfirmedItems(prev => prev.slice(0, prev.length - cartSnapshot.length));
       webAlert('เกิดข้อผิดพลาด', err?.message ?? 'สั่งอาหารไม่ได้ กรุณาลองใหม่');
       setScreen('confirm');
     }
@@ -535,38 +543,49 @@ export default function CustomerOrderScreen() {
             return;
           }
 
-          // ── Total changed (item cancelled by shop) → refresh items + QR ──
+          // ── Total changed (item cancelled by shop) → refresh ALL table items ──
           if (newTotal !== undefined && newTotal !== null) {
-            // Refetch active items from DB
             try {
-              const { data: freshItems } = await supabaseCustomer
-                .rpc('get_order_items_for_customer', { p_order_id: orderId });
-              if (freshItems) {
-                const restored: CartEntry[] = freshItems.map((row: any) => ({
+              const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+                p_shop_id: shopId,
+                p_table_number: tableNumber,
+              });
+              if (rows && rows.length > 0) {
+                const orderMap = new Map<string, { id: string; orderNumber: number; status: string; total: number }>();
+                rows.forEach((r: any) => {
+                  if (!orderMap.has(r.order_id)) {
+                    orderMap.set(r.order_id, {
+                      id: r.order_id,
+                      orderNumber: r.order_number,
+                      status: r.order_status,
+                      total: Number(r.order_total),
+                    });
+                  }
+                });
+                setTableOrders(Array.from(orderMap.values()));
+                const combined: CartEntry[] = rows.map((r: any) => ({
                   item: {
-                    id: row.product_id,
-                    name: row.product_name,
-                    price: Number(row.unit_price),
-                    image_url: row.image_url,
-                    category_id: row.category_id,
-                    is_active: row.is_active,
+                    id: r.product_id,
+                    name: r.product_name,
+                    price: Number(r.unit_price),
+                    image_url: r.product_image_url,
+                    category_id: null,
+                    is_active: true,
                   },
-                  qty: row.quantity,
+                  qty: r.quantity,
+                  orderId: r.order_id,
+                  orderNumber: r.order_number,
                 }));
-                setConfirmedItems(restored);
+                setConfirmedItems(combined);
+
+                // Regenerate QR with combined total
+                const combinedTotal = Array.from(orderMap.values()).reduce((s, o) => s + o.total, 0);
+                if (combinedTotal > 0 && promptpayIdRef.current) {
+                  setQrPayload(generatePromptPayPayload(promptpayIdRef.current, combinedTotal));
+                }
               }
             } catch {
-              // Non-fatal: RPC unavailable
-            }
-
-            // Regenerate QR payload with new total
-            const totalNum = Number(newTotal);
-            if (totalNum > 0 && promptpayIdRef.current) {
-              try {
-                setQrPayload(generatePromptPayPayload(promptpayIdRef.current, totalNum));
-              } catch {
-                // Non-fatal
-              }
+              // Non-fatal
             }
           }
         }
@@ -582,6 +601,125 @@ export default function CustomerOrderScreen() {
       orderChannel.unsubscribe();
     };
   }, [orderId]);
+
+  // ── realtime: listen to ALL orders for this table (cancel/status changes) ──
+  const refreshTableRef = useRef<() => Promise<void>>();
+  refreshTableRef.current = async () => {
+    try {
+      const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+        p_shop_id: shopId,
+        p_table_number: tableNumber,
+      });
+      if (rows && rows.length > 0) {
+        const orderMap = new Map<string, { id: string; orderNumber: number; status: string; total: number }>();
+        rows.forEach((r: any) => {
+          if (!orderMap.has(r.order_id)) {
+            orderMap.set(r.order_id, {
+              id: r.order_id,
+              orderNumber: r.order_number,
+              status: r.order_status,
+              total: Number(r.order_total),
+            });
+          }
+        });
+        setTableOrders(Array.from(orderMap.values()));
+        const combined: CartEntry[] = rows.map((r: any) => ({
+          item: {
+            id: r.product_id,
+            name: r.product_name,
+            price: Number(r.unit_price),
+            image_url: r.product_image_url,
+            category_id: null,
+            is_active: true,
+          },
+          qty: r.quantity,
+          orderId: r.order_id,
+          orderNumber: r.order_number,
+        }));
+        if (cart.length === 0) setConfirmedItems(combined);
+        const combinedTotal = Array.from(orderMap.values()).reduce((s, o) => s + o.total, 0);
+        if (combinedTotal > 0 && promptpayIdRef.current) {
+          try { setQrPayload(generatePromptPayPayload(promptpayIdRef.current, combinedTotal)); } catch {}
+        }
+      } else {
+        setTableOrders([]);
+        if (cart.length === 0) setConfirmedItems([]);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!shopId || !tableNumber) return;
+    const tableChannel = supabaseCustomer
+      .channel(`customer-table:${shopId}:${tableNumber}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `table_number=eq.${tableNumber}`,
+        },
+        () => { refreshTableRef.current?.(); }
+      )
+      .subscribe();
+    return () => { tableChannel.unsubscribe(); };
+  }, [shopId, tableNumber]);
+
+  // ── auto-reload: poll table orders every 10s to keep statuses fresh ────────
+  useEffect(() => {
+    if (!shopId || !tableNumber) return;
+    const poll = async () => {
+      try {
+        const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+          p_shop_id: shopId,
+          p_table_number: tableNumber,
+        });
+        if (rows && rows.length > 0) {
+          const orderMap = new Map<string, { id: string; orderNumber: number; status: string; total: number }>();
+          rows.forEach((r: any) => {
+            if (!orderMap.has(r.order_id)) {
+              orderMap.set(r.order_id, {
+                id: r.order_id,
+                orderNumber: r.order_number,
+                status: r.order_status,
+                total: Number(r.order_total),
+              });
+            }
+          });
+          setTableOrders(Array.from(orderMap.values()));
+
+          // Refresh confirmed items with latest data
+          const combined: CartEntry[] = rows.map((r: any) => ({
+            item: {
+              id: r.product_id,
+              name: r.product_name,
+              price: Number(r.unit_price),
+              image_url: r.product_image_url,
+              category_id: null,
+              is_active: true,
+            },
+            qty: r.quantity,
+            orderId: r.order_id,
+            orderNumber: r.order_number,
+          }));
+          setConfirmedItems((prev) => {
+            // Only update if cart items from new orders appeared or statuses changed
+            const newPending = cart.length > 0; // user is mid-order, don't overwrite
+            return newPending ? prev : combined;
+          });
+        } else if (tableOrders.length > 0) {
+          // All orders completed/cancelled — clear
+          setTableOrders([]);
+          setConfirmedItems([]);
+        }
+      } catch {
+        // Non-fatal: polling failure
+      }
+    };
+    const interval = setInterval(poll, 10_000);
+    return () => clearInterval(interval);
+  }, [shopId, tableNumber, cart.length]);
 
   // QR countdown timer (#14) — 5 minutes, resets when entering paying screen
   useEffect(() => {
@@ -866,56 +1004,61 @@ export default function CustomerOrderScreen() {
             </View>
           ) : (
             <>
-              {/* ── Confirmed items (read-only) ── */}
-              {confirmedItems.length > 0 && (
-                <>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionHeaderText}>
-                      {orderStatus === 'preparing' ? '🍳 กำลังปรุง...'
-                        : orderStatus === 'ready' ? '🍽️ พร้อมเสิร์ฟแล้ว!'
-                        : orderStatus === 'completed' ? '✅ เสร็จแล้ว'
-                        : '✓ สั่งแล้ว — รออาหาร'}
-                    </Text>
-                  </View>
-                  {tableOrders.length > 1 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, paddingHorizontal: 16 }}>
-                      <Text style={{ fontSize: 13, color: '#6B7280' }}>
-                        รวม {tableOrders.length} ออเดอร์
-                      </Text>
+              {/* ── Confirmed items grouped by status ── */}
+              {confirmedItems.length > 0 && (() => {
+                const servedItems = confirmedItems.filter(e => {
+                  const o = tableOrders.find(to => to.id === e.orderId);
+                  return o?.status === 'ready' || o?.status === 'completed';
+                });
+                const preparingItems = confirmedItems.filter(e => {
+                  const o = tableOrders.find(to => to.id === e.orderId);
+                  return o?.status === 'preparing';
+                });
+                const pendingItems = confirmedItems.filter(e => {
+                  const o = tableOrders.find(to => to.id === e.orderId);
+                  return !o || o.status === 'pending';
+                });
+
+                const renderItemGroup = (items: CartEntry[], label: string, icon: string) => items.length > 0 ? (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionHeaderText}>{icon} {label}</Text>
                     </View>
-                  )}
-                  {/* Kitchen status banner */}
-                  {orderStatus === 'preparing' && (
-                    <View style={styles.kitchenBanner}>
-                      <Text style={styles.kitchenBannerText}>ครัวกำลังเตรียมอาหารของคุณ</Text>
-                    </View>
-                  )}
-                  {orderStatus === 'ready' && (
-                    <View style={[styles.kitchenBanner, styles.kitchenBannerReady]}>
-                      <Text style={[styles.kitchenBannerText, styles.kitchenBannerReadyText]}>
-                        อาหารพร้อมแล้ว!
-                      </Text>
-                    </View>
-                  )}
-                  {confirmedItems.map((entry, idx) => (
-                    <View key={`confirmed-${entry.item.id}-${idx}`} style={[styles.cartRow, styles.confirmedRow]}>
-                      <View style={styles.confirmedCheck}>
-                        <Text style={styles.confirmedCheckText}>✓</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cartItemName}>{entry.item.name}</Text>
-                        <Text style={styles.cartItemPrice}>
-                          {formatPrice(entry.item.price)} / ชิ้น
+                    {items.map((entry, idx) => (
+                      <View key={`confirmed-${entry.orderId}-${entry.item.id}-${idx}`} style={[styles.cartRow, styles.confirmedRow]}>
+                        <View style={styles.confirmedCheck}>
+                          <Text style={styles.confirmedCheckText}>✓</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cartItemName}>{entry.item.name}</Text>
+                          <Text style={styles.cartItemPrice}>
+                            {formatPrice(entry.item.price)} / ชิ้น
+                          </Text>
+                        </View>
+                        <Text style={[styles.qtyValue, { marginHorizontal: 16 }]}>×{entry.qty}</Text>
+                        <Text style={styles.cartItemSubtotal}>
+                          {formatPrice(entry.item.price * entry.qty)}
                         </Text>
                       </View>
-                      <Text style={[styles.qtyValue, { marginHorizontal: 16 }]}>×{entry.qty}</Text>
-                      <Text style={styles.cartItemSubtotal}>
-                        {formatPrice(entry.item.price * entry.qty)}
-                      </Text>
-                    </View>
-                  ))}
-                </>
-              )}
+                    ))}
+                  </>
+                ) : null;
+
+                return (
+                  <>
+                    {tableOrders.length > 1 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, paddingHorizontal: 16 }}>
+                        <Text style={{ fontSize: 13, color: '#6B7280' }}>
+                          รวม {tableOrders.length} ออเดอร์
+                        </Text>
+                      </View>
+                    )}
+                    {renderItemGroup(servedItems, 'เสิร์ฟแล้ว', '🍽️')}
+                    {renderItemGroup(preparingItems, 'กำลังเตรียม', '🍳')}
+                    {renderItemGroup(pendingItems, 'รอดำเนินการ', '⏳')}
+                  </>
+                );
+              })()}
 
               {/* ── New items (editable) ── */}
               {cart.length > 0 && (
@@ -998,13 +1141,24 @@ export default function CustomerOrderScreen() {
             </TouchableOpacity>
           </View>
         ) : confirmedItems.length > 0 ? (
-          /* No new items, has confirmed → "สั่งเพิ่ม" back to menu */
+          /* No new items, has confirmed → payment + add more */
           <View style={styles.bottomBar}>
             <TouchableOpacity
-              style={[styles.primaryButton, styles.addItemsButton]}
+              style={styles.primaryButton}
+              onPress={() => {
+                if (!qrPayload && promptpayId && confirmedTotal > 0) {
+                  setQrPayload(generatePromptPayPayload(promptpayId, confirmedTotal));
+                }
+                setScreen('paying');
+              }}
+            >
+              <Text style={styles.primaryButtonText}>ชำระเงิน — {formatPrice(confirmedTotal)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryLinkButton}
               onPress={() => setScreen('menu')}
             >
-              <Text style={styles.primaryButtonText}>+ สั่งเพิ่ม</Text>
+              <Text style={styles.secondaryLinkText}>+ สั่งเพิ่ม</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -1917,6 +2071,15 @@ const styles = StyleSheet.create({
   // button variants (#10)
   addItemsButton: {
     backgroundColor: '#F59E0B',
+  },
+  secondaryLinkButton: {
+    paddingVertical: 10,
+    alignItems: 'center' as const,
+  },
+  secondaryLinkText: {
+    fontSize: 15,
+    color: Colors.primary,
+    fontWeight: '600' as const,
   },
   payButton: {
     backgroundColor: '#059669',

@@ -67,6 +67,7 @@ export default function OrdersScreen() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
   const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
   const [viewMode, setViewMode] = useState<'kitchen' | 'bills'>('kitchen');
+  const [refreshing, setRefreshing] = useState(false);
   const [billPayModal, setBillPayModal] = useState<{
     tableNumber: string;
     orders: OrderWithItems[];
@@ -340,9 +341,23 @@ export default function OrdersScreen() {
         tableNumber: tableNum,
         orders: tableOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
         totalAmount: tableOrders.reduce((sum, o) => sum + (o.total_amount ?? 0), 0),
-        allItems: tableOrders.flatMap(o =>
-          (o.items ?? []).filter(i => (i as any).item_status === undefined || (i as any).item_status === 'active')
-        ),
+        allItems: (() => {
+          const raw = tableOrders.flatMap(o =>
+            (o.items ?? []).filter(i => (i as any).item_status === undefined || (i as any).item_status === 'active')
+          );
+          // Merge items with same product_id
+          const merged: Record<string, { product: any; quantity: number; subtotal: number; id: string }> = {};
+          raw.forEach(i => {
+            const pid = i.product_id;
+            if (merged[pid]) {
+              merged[pid].quantity += i.quantity;
+              merged[pid].subtotal += (i.subtotal ?? 0);
+            } else {
+              merged[pid] = { product: (i as any).product, quantity: i.quantity, subtotal: i.subtotal ?? 0, id: (i as any).id ?? pid };
+            }
+          });
+          return Object.values(merged);
+        })(),
       }))
       .sort((a, b) => parseInt(a.tableNumber) - parseInt(b.tableNumber));
   }, [orders]);
@@ -571,8 +586,12 @@ export default function OrdersScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
         contentContainerStyle={styles.listContent}
-        onRefresh={() => shop?.id && fetchOrders(shop.id)}
-        refreshing={isLoading}
+        onRefresh={() => {
+          if (!shop?.id) return;
+          setRefreshing(true);
+          fetchOrders(shop.id).finally(() => setRefreshing(false));
+        }}
+        refreshing={refreshing}
         removeClippedSubviews
         maxToRenderPerBatch={10}
         windowSize={5}
@@ -669,16 +688,100 @@ export default function OrdersScreen() {
                         })}
                       </View>
 
-                      {/* Items list */}
-                      {bill.allItems.map((item, idx) => (
-                        <View key={(item as any).id ?? idx} style={styles.billItemRow}>
-                          <Text style={styles.billItemName} numberOfLines={1}>
-                            {(item as any).product?.name ?? 'สินค้า'}
-                          </Text>
-                          <Text style={styles.billItemQty}>x{item.quantity}</Text>
-                          <Text style={styles.billItemPrice}>฿{(item.subtotal ?? 0).toFixed(0)}</Text>
-                        </View>
-                      ))}
+                      {/* Orders breakdown */}
+                      {bill.orders.map((order) => {
+                        const activeItems = (order.items ?? []).filter(
+                          (i: any) => (i.item_status ?? 'active') === 'active'
+                        );
+                        const orderStatusColor = statusColors[order.status] ?? '#9CA3AF';
+                        return (
+                          <View key={order.id} style={styles.billOrderSection}>
+                            <View style={styles.billOrderHeader}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <Text style={styles.billOrderNum}>#{order.order_number}</Text>
+                                <View style={[styles.miniStatusBadge, { backgroundColor: orderStatusColor + '22' }]}>
+                                  <Text style={[styles.miniStatusText, { color: orderStatusColor }]}>
+                                    {statusLabels[order.status] ?? order.status}
+                                  </Text>
+                                </View>
+                              </View>
+                              <TouchableOpacity
+                                style={styles.billCancelBtn}
+                                onPress={() => {
+                                  const isCooked = order.status === 'preparing' || order.status === 'ready';
+                                  const itemCount = activeItems.length;
+                                  const warning = isCooked ? '\n⚠️ อาหารกำลังทำ/ทำเสร็จแล้ว' : '';
+                                  Alert.alert(
+                                    `ยกเลิกออเดอร์ #${order.order_number}`,
+                                    `ยกเลิกทั้งออเดอร์ (${itemCount} รายการ ฿${(order.total_amount ?? 0).toFixed(0)})?${warning}`,
+                                    [
+                                      { text: 'ไม่ยกเลิก', style: 'cancel' },
+                                      {
+                                        text: 'ยืนยันยกเลิก',
+                                        style: 'destructive',
+                                        onPress: () => {
+                                          if (!profile?.id) return;
+                                          cancelOrder(order.id, profile.id)
+                                            .then(() => { if (shop?.id) fetchOrders(shop.id); })
+                                            .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
+                                        },
+                                      },
+                                    ]
+                                  );
+                                }}
+                              >
+                                <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                              </TouchableOpacity>
+                            </View>
+                            {activeItems.map((item: any, idx: number) => (
+                              <View key={item.id ?? idx} style={styles.billItemRow}>
+                                <Text style={styles.billItemName} numberOfLines={1}>
+                                  {item.product?.name ?? 'สินค้า'}
+                                </Text>
+                                <Text style={styles.billItemQty}>x{item.quantity}</Text>
+                                <Text style={styles.billItemPrice}>฿{(item.subtotal ?? 0).toFixed(0)}</Text>
+                                <TouchableOpacity
+                                  style={styles.billItemCancelBtn}
+                                  onPress={() => {
+                                    const itemName = item.product?.name ?? 'สินค้า';
+                                    const isCooked = order.status === 'preparing' || order.status === 'ready';
+                                    const warning = isCooked ? '\n⚠️ อาหารกำลังทำ/ทำเสร็จแล้ว' : '';
+                                    Alert.alert(
+                                      `ยกเลิก "${itemName}"`,
+                                      `ลบ ${itemName} x${item.quantity} (฿${(item.subtotal ?? 0).toFixed(0)}) ออกจากออเดอร์ #${order.order_number}?${warning}`,
+                                      [
+                                        { text: 'ไม่ยกเลิก', style: 'cancel' },
+                                        {
+                                          text: 'ยืนยันยกเลิก',
+                                          style: 'destructive',
+                                          onPress: () => {
+                                            if (!profile?.id) return;
+                                            cancelOrderItem(order.id, item.id, profile.id)
+                                              .then(() => { if (shop?.id) fetchOrders(shop.id); })
+                                              .catch((err: any) => Alert.alert('ผิดพลาด', err.message));
+                                          },
+                                        },
+                                      ]
+                                    );
+                                  }}
+                                >
+                                  <Ionicons name="close-circle" size={18} color="#EF4444" />
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                            {/* Cancelled items (strikethrough) */}
+                            {(order.items ?? []).filter((i: any) => i.item_status === 'cancelled').map((item: any, idx: number) => (
+                              <View key={`cancelled-${item.id ?? idx}`} style={[styles.billItemRow, { opacity: 0.4 }]}>
+                                <Text style={[styles.billItemName, { textDecorationLine: 'line-through' }]} numberOfLines={1}>
+                                  {item.product?.name ?? 'สินค้า'}
+                                </Text>
+                                <Text style={[styles.billItemQty, { textDecorationLine: 'line-through' }]}>x{item.quantity}</Text>
+                                <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '500' }}>ยกเลิก</Text>
+                              </View>
+                            ))}
+                          </View>
+                        );
+                      })}
 
                       {/* Total */}
                       <View style={styles.billTotalRow}>
@@ -698,7 +801,7 @@ export default function OrdersScreen() {
                             cashInput: '',
                           })}
                         >
-                          <Ionicons name="phone-portrait-outline" size={16} color="#fff" />
+                          <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
                           <Text style={styles.billPayBtnText}>ยืนยันรับโอน</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -776,7 +879,7 @@ export default function OrdersScreen() {
                       style={[styles.methodPill, payModal.method === 'qr' && styles.methodPillActive]}
                       onPress={() => setPayModal((p) => p ? { ...p, method: 'qr', cashInput: '' } : p)}
                     >
-                      <Ionicons name="phone-portrait-outline" size={16} color={payModal.method === 'qr' ? '#fff' : colors.text.secondary} />
+                      <Ionicons name="checkmark-circle-outline" size={16} color={payModal.method === 'qr' ? '#fff' : colors.text.secondary} />
                       <Text style={[styles.methodPillText, payModal.method === 'qr' && styles.methodPillTextActive]}>โอน/QR</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -849,7 +952,7 @@ export default function OrdersScreen() {
                       style={[styles.methodPill, billPayModal.method === 'qr' && styles.methodPillActive]}
                       onPress={() => setBillPayModal((p) => p ? { ...p, method: 'qr', cashInput: '' } : p)}
                     >
-                      <Ionicons name="phone-portrait-outline" size={16} color={billPayModal.method === 'qr' ? '#fff' : colors.text.secondary} />
+                      <Ionicons name="checkmark-circle-outline" size={16} color={billPayModal.method === 'qr' ? '#fff' : colors.text.secondary} />
                       <Text style={[styles.methodPillText, billPayModal.method === 'qr' && styles.methodPillTextActive]}>โอน/QR</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1437,13 +1540,39 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full,
     overflow: 'hidden',
   },
+  billOrderSection: {
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  billOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  billOrderNum: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text.secondary,
+  },
+  billCancelBtn: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+  },
   billItemRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderLight,
+    gap: 4,
+  },
+  billItemCancelBtn: {
+    padding: 4,
+    marginLeft: 2,
   },
   billItemName: {
     fontSize: 14,
