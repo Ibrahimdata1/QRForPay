@@ -329,12 +329,11 @@ export const useAuthStore = create<AuthState>()(
       try {
         const { data, error } = await supabase.rpc('get_pending_users')
         if (error) throw error
-        console.log('[fetchPendingUsers] data:', JSON.stringify(data))
         set((state) => {
           state.pendingUsers = (data ?? []) as PendingUser[]
         })
       } catch (err) {
-        console.error('[fetchPendingUsers] error:', err)
+        if (__DEV__) console.error('[fetchPendingUsers] error:', err)
       }
     },
 
