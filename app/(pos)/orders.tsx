@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -65,9 +64,6 @@ export default function OrdersScreen() {
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'>('all');
   const [payModal, setPayModal] = useState<{ order: OrderWithItems; method: 'qr' | 'cash'; cashInput: string } | null>(null);
-  const [newOrderAlert, setNewOrderAlert] = useState<{ orderNum: number } | null>(null);
-  const knownOrderIds = useRef<Set<string>>(new Set());
-  const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,22 +98,6 @@ export default function OrdersScreen() {
       .subscribe();
     return () => { channel.unsubscribe(); };
   }, [shop?.id]);
-
-  // Detect new pending orders → vibrate + show alert banner
-  useEffect(() => {
-    if (orders.length === 0) return;
-    const newPending = orders.filter(
-      (o) => o.status === 'pending' && !knownOrderIds.current.has(o.id)
-    );
-    if (newPending.length > 0 && knownOrderIds.current.size > 0) {
-      Vibration.vibrate([0, 400, 150, 400]);
-      const latest = newPending[newPending.length - 1];
-      setNewOrderAlert({ orderNum: latest.order_number });
-      if (alertTimer.current) clearTimeout(alertTimer.current);
-      alertTimer.current = setTimeout(() => setNewOrderAlert(null), 5000);
-    }
-    orders.forEach((o) => knownOrderIds.current.add(o.id));
-  }, [orders]);
 
   const handleCancelOrder = (order: OrderWithItems) => {
     Alert.alert(
@@ -454,14 +434,6 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* New order alert banner */}
-      {newOrderAlert ? (
-        <TouchableOpacity style={styles.newOrderBanner} activeOpacity={0.85} onPress={() => setNewOrderAlert(null)}>
-          <Ionicons name="notifications" size={18} color="#FFFFFF" />
-          <Text style={styles.newOrderBannerText}>ออเดอร์ใหม่ #{newOrderAlert.orderNum} เข้ามาแล้ว!</Text>
-          <Ionicons name="close" size={16} color="#FFFFFF" />
-        </TouchableOpacity>
-      ) : null}
       {/* Fetch error banner */}
       {fetchError ? (
         <View style={styles.errorBanner}>
@@ -1083,20 +1055,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   payConfirmText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  newOrderBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  newOrderBannerText: {
-    flex: 1,
-    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },

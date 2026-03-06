@@ -1,13 +1,56 @@
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity, Alert, Platform } from 'react-native';
+import { TouchableOpacity, Alert, Platform, View, Text, StyleSheet, Vibration } from 'react-native';
+import { useRef, useState, useEffect } from 'react';
 import { shadow } from '../../constants/theme';
 import { useAuthStore } from '../../src/store/authStore';
+import { useOrderStore } from '../../src/store/orderStore';
+import { supabase } from '../../src/lib/supabase';
 import { useTheme } from '../../constants/ThemeContext';
 
 export default function POSLayout() {
   const { colors } = useTheme();
   const signOut = useAuthStore((s) => s.signOut);
+  const shop = useAuthStore((s) => s.shop);
+  const orders = useOrderStore((s) => s.orders);
+  const fetchOrders = useOrderStore((s) => s.fetchOrders);
+
+  const [newOrderAlert, setNewOrderAlert] = useState<{ orderNum: number; tableNum?: number } | null>(null);
+  const knownOrderIds = useRef<Set<string>>(new Set());
+  const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Always-on realtime subscription (layout stays mounted on all tabs)
+  useEffect(() => {
+    if (!shop?.id) return;
+    const channel = supabase
+      .channel('pos-layout-orders')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shop.id}` },
+        () => { fetchOrders(shop.id); }
+      )
+      .subscribe();
+    return () => { channel.unsubscribe(); };
+  }, [shop?.id]);
+
+  // Detect new pending orders and alert
+  useEffect(() => {
+    if (orders.length === 0) return;
+    const newPending = orders.filter(
+      (o) => o.status === 'pending' && !knownOrderIds.current.has(o.id)
+    );
+    if (newPending.length > 0 && knownOrderIds.current.size > 0) {
+      Vibration.vibrate([0, 400, 150, 400]);
+      const latest = newPending[newPending.length - 1];
+      setNewOrderAlert({
+        orderNum: latest.order_number,
+        tableNum: (latest as any).table_number ?? undefined,
+      });
+      if (alertTimer.current) clearTimeout(alertTimer.current);
+      alertTimer.current = setTimeout(() => setNewOrderAlert(null), 5000);
+    }
+    orders.forEach((o) => knownOrderIds.current.add(o.id));
+  }, [orders]);
 
   const handleLogout = async () => {
     // On web use window.confirm (works reliably), on native use Alert
@@ -36,6 +79,7 @@ export default function POSLayout() {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
@@ -136,5 +180,43 @@ export default function POSLayout() {
         }}
       />
     </Tabs>
+    {/* New-order alert banner — floats above tab bar */}
+    {newOrderAlert ? (
+      <TouchableOpacity
+        style={styles.newOrderBanner}
+        activeOpacity={0.85}
+        onPress={() => setNewOrderAlert(null)}
+      >
+        <Ionicons name="notifications" size={18} color="#FFFFFF" />
+        <Text style={styles.newOrderBannerText}>
+          {`ออเดอร์ใหม่ #${newOrderAlert.orderNum}${newOrderAlert.tableNum ? ` โต๊ะ ${newOrderAlert.tableNum}` : ''} เข้ามาแล้ว!`}
+        </Text>
+        <Ionicons name="close" size={16} color="#FFFFFF" />
+      </TouchableOpacity>
+    ) : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  newOrderBanner: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 80 : 72,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    zIndex: 999,
+    elevation: 10,
+  },
+  newOrderBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+});
