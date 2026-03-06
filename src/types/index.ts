@@ -14,7 +14,7 @@ export interface Profile {
   id: string
   email?: string              // populated for OAuth users; may be absent for legacy rows
   full_name: string
-  role: 'owner' | 'cashier' | null  // null = pending owner approval
+  role: 'super_admin' | 'owner' | 'cashier' | null  // null = pending approval
   shop_id: string | null      // null until approved
   avatar_url?: string
   push_token?: string | null

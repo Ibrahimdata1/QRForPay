@@ -15,8 +15,16 @@ export interface TeamMember {
   id: string
   email?: string
   full_name?: string
-  role: 'owner' | 'cashier' | null
+  role: 'super_admin' | 'owner' | 'cashier' | null
   avatar_url?: string
+}
+
+export interface PendingUser {
+  id: string
+  email?: string
+  full_name?: string
+  avatar_url?: string
+  created_at: string
 }
 
 interface AuthState {
@@ -24,6 +32,7 @@ interface AuthState {
   profile: Profile | null
   shop: Shop | null
   team: TeamMember[]
+  pendingUsers: PendingUser[]
   isLoading: boolean
   isInitialized: boolean
 
@@ -32,9 +41,13 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   registerPushToken: (userId: string) => Promise<void>
+  // Owner actions
   fetchTeam: () => Promise<void>
-  approveUser: (email: string, role: 'owner' | 'cashier') => Promise<void>
+  createCashier: (fullName: string, email: string, password: string) => Promise<void>
   removeTeamMember: (profileId: string) => Promise<void>
+  // Super admin actions
+  fetchPendingUsers: () => Promise<void>
+  approveOwner: (userId: string, shopName: string, promptpayId: string) => Promise<void>
 }
 
 async function loadProfileAndShop(userId: string) {
@@ -63,6 +76,7 @@ export const useAuthStore = create<AuthState>()(
     profile: null,
     shop: null,
     team: [],
+    pendingUsers: [],
     isLoading: false,
     isInitialized: false,
 
@@ -203,6 +217,7 @@ export const useAuthStore = create<AuthState>()(
         state.profile = null
         state.shop = null
         state.team = []
+        state.pendingUsers = []
       })
 
       try {
@@ -271,20 +286,46 @@ export const useAuthStore = create<AuthState>()(
       }
     },
 
-    approveUser: async (email: string, role: 'owner' | 'cashier') => {
-      const shop = get().shop
-      if (!shop?.id) throw new Error('ไม่พบข้อมูลร้าน')
+    createCashier: async (fullName: string, email: string, password: string) => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('ไม่ได้เข้าสู่ระบบ')
 
-      const { error } = await supabase.rpc('approve_pending_user', {
-        p_email: email.trim().toLowerCase(),
-        p_role: role,
-        p_shop_id: shop.id,
+      const { data, error } = await supabase.functions.invoke('create-cashier', {
+        body: { full_name: fullName, email, password },
+      })
+
+      if (error) throw new Error(error.message)
+      if (data?.error) throw new Error(data.error)
+
+      // Refresh team list
+      await get().fetchTeam()
+    },
+
+    fetchPendingUsers: async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_pending_users')
+        if (error) throw error
+        set((state) => {
+          state.pendingUsers = (data ?? []) as PendingUser[]
+        })
+      } catch {
+        // Non-critical
+      }
+    },
+
+    approveOwner: async (userId: string, shopName: string, promptpayId: string) => {
+      const { error } = await supabase.rpc('approve_owner_signup', {
+        p_user_id: userId,
+        p_shop_name: shopName.trim(),
+        p_promptpay: promptpayId.trim(),
       })
 
       if (error) throw error
 
-      // Refresh team list
-      await get().fetchTeam()
+      // Remove from pending list locally
+      set((state) => {
+        state.pendingUsers = state.pendingUsers.filter((u) => u.id !== userId)
+      })
     },
 
     removeTeamMember: async (profileId: string) => {

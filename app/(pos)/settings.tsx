@@ -16,7 +16,7 @@ import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/store/authStore';
 import { shadow, radius } from '../../constants/theme';
 import { useTheme, ThemeColors } from '../../constants/ThemeContext';
-import { TeamMember } from '../../src/store/authStore';
+import { TeamMember, PendingUser } from '../../src/store/authStore';
 
 export default function SettingsScreen() {
   const { colors, isDark, override, setOverride } = useTheme();
@@ -26,11 +26,15 @@ export default function SettingsScreen() {
   const profile = useAuthStore((s) => s.profile);
   const user = useAuthStore((s) => s.user);
 
+  const isSuperAdmin = profile?.role === 'super_admin';
   const isOwner = profile?.role === 'owner';
 
   const team = useAuthStore((s) => s.team);
+  const pendingUsers = useAuthStore((s) => s.pendingUsers);
   const fetchTeam = useAuthStore((s) => s.fetchTeam);
-  const approveUser = useAuthStore((s) => s.approveUser);
+  const fetchPendingUsers = useAuthStore((s) => s.fetchPendingUsers);
+  const createCashier = useAuthStore((s) => s.createCashier);
+  const approveOwner = useAuthStore((s) => s.approveOwner);
   const removeTeamMember = useAuthStore((s) => s.removeTeamMember);
 
   const [shopName, setShopName] = useState('');
@@ -39,10 +43,17 @@ export default function SettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Team management state
-  const [approveEmail, setApproveEmail] = useState('');
-  const [approveRole, setApproveRole] = useState<'owner' | 'cashier'>('cashier');
-  const [isApproving, setIsApproving] = useState(false);
+  // Owner: create cashier state
+  const [cashierName, setCashierName] = useState('');
+  const [cashierEmail, setCashierEmail] = useState('');
+  const [cashierPassword, setCashierPassword] = useState('');
+  const [isCreatingCashier, setIsCreatingCashier] = useState(false);
+
+  // Super admin: approve owner state
+  const [approvingUser, setApprovingUser] = useState<PendingUser | null>(null);
+  const [newShopName, setNewShopName] = useState('');
+  const [newPromptpay, setNewPromptpay] = useState('');
+  const [isApprovingOwner, setIsApprovingOwner] = useState(false);
 
   // Seed local state from store when shop loads
   useEffect(() => {
@@ -53,12 +64,13 @@ export default function SettingsScreen() {
     }
   }, [shop]);
 
-  // Load team when owner opens settings
   useEffect(() => {
-    if (isOwner && shop?.id) {
-      fetchTeam();
-    }
+    if (isOwner && shop?.id) fetchTeam();
   }, [isOwner, shop?.id]);
+
+  useEffect(() => {
+    if (isSuperAdmin) fetchPendingUsers();
+  }, [isSuperAdmin]);
 
   const checkDirty = (name: string, ppay: string, tc: string) => {
     setIsDirty(
@@ -148,20 +160,37 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!approveEmail.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมลของผู้ใช้');
+  const handleCreateCashier = async () => {
+    if (!cashierName.trim() || !cashierEmail.trim() || !cashierPassword.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
-    setIsApproving(true);
+    setIsCreatingCashier(true);
     try {
-      await approveUser(approveEmail.trim(), approveRole);
-      setApproveEmail('');
-      Alert.alert('สำเร็จ', `อนุมัติผู้ใช้ ${approveEmail.trim()} เรียบร้อยแล้ว`);
+      await createCashier(cashierName.trim(), cashierEmail.trim(), cashierPassword.trim());
+      setCashierName(''); setCashierEmail(''); setCashierPassword('');
+      Alert.alert('สำเร็จ', `สร้างบัญชีพนักงาน ${cashierEmail.trim()} เรียบร้อยแล้ว`);
     } catch (err: any) {
-      Alert.alert('เกิดข้อผิดพลาด', err.message ?? 'ไม่สามารถอนุมัติได้');
+      Alert.alert('เกิดข้อผิดพลาด', err.message ?? 'สร้างบัญชีไม่สำเร็จ');
     } finally {
-      setIsApproving(false);
+      setIsCreatingCashier(false);
+    }
+  };
+
+  const handleApproveOwner = async () => {
+    if (!approvingUser) return;
+    if (!newShopName.trim() || !newPromptpay.trim()) {
+      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อร้านและ PromptPay ID');
+      return;
+    }
+    setIsApprovingOwner(true);
+    try {
+      await approveOwner(approvingUser.id, newShopName.trim(), newPromptpay.trim());
+      setApprovingUser(null); setNewShopName(''); setNewPromptpay('');
+    } catch (err: any) {
+      Alert.alert('เกิดข้อผิดพลาด', err.message ?? 'อนุมัติไม่สำเร็จ');
+    } finally {
+      setIsApprovingOwner(false);
     }
   };
 
@@ -197,8 +226,8 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Shop Settings Section */}
-        <View style={styles.section}>
+        {/* Shop Settings Section — hidden for super_admin (no shop) */}
+        {!isSuperAdmin && <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="storefront-outline" size={18} color={colors.primary} />
             <Text style={styles.sectionTitle}>ข้อมูลร้าน</Text>
@@ -251,7 +280,7 @@ export default function SettingsScreen() {
               <Text style={styles.readOnlyText}>เฉพาะเจ้าของร้านเท่านั้นที่แก้ไขได้</Text>
             </View>
           )}
-        </View>
+        </View>}
 
         {/* Save button — only visible for owners */}
         {isOwner && (
@@ -291,79 +320,160 @@ export default function SettingsScreen() {
 
           <View style={styles.rolePill}>
             <Ionicons
-              name={isOwner ? 'shield-checkmark-outline' : 'person-circle-outline'}
+              name={isSuperAdmin ? 'star-outline' : isOwner ? 'shield-checkmark-outline' : 'person-circle-outline'}
               size={14}
-              color={isOwner ? colors.primary : colors.text.secondary}
+              color={(isSuperAdmin || isOwner) ? colors.primary : colors.text.secondary}
             />
-            <Text style={[styles.roleText, isOwner && styles.roleTextOwner]}>
-              {isOwner ? 'เจ้าของร้าน' : 'แคชเชียร์'}
+            <Text style={[styles.roleText, (isSuperAdmin || isOwner) && styles.roleTextOwner]}>
+              {isSuperAdmin ? 'System Admin' : isOwner ? 'เจ้าของร้าน' : 'แคชเชียร์'}
             </Text>
           </View>
         </View>
 
-        {/* Team Management — owner only */}
+        {/* ======================================================
+            SUPER ADMIN: อนุมัติเจ้าของร้านใหม่
+        ====================================================== */}
+        {isSuperAdmin && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="star-outline" size={18} color={colors.primary} />
+              <Text style={styles.sectionTitle}>อนุมัติเจ้าของร้าน</Text>
+            </View>
+
+            {pendingUsers.length === 0 ? (
+              <View style={styles.emptyTeam}>
+                <Ionicons name="checkmark-circle-outline" size={32} color={colors.text.light} />
+                <Text style={styles.emptyTeamText}>ไม่มีผู้รออนุมัติ</Text>
+              </View>
+            ) : (
+              pendingUsers.map((u) => (
+                <View key={u.id} style={styles.teamMemberRow}>
+                  <View style={styles.teamMemberAvatar}>
+                    <Text style={styles.teamMemberAvatarText}>
+                      {(u.full_name || u.email || '?').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.teamMemberInfo}>
+                    <Text style={styles.teamMemberName} numberOfLines={1}>
+                      {u.full_name || '(ไม่ระบุชื่อ)'}
+                    </Text>
+                    <Text style={styles.teamMemberEmail} numberOfLines={1}>
+                      {u.email}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.approveButton}
+                    onPress={() => { setApprovingUser(u); setNewShopName(''); setNewPromptpay(''); }}
+                  >
+                    <Text style={styles.approveButtonText}>อนุมัติ</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+
+            {/* Approve modal-like inline form */}
+            {approvingUser && (
+              <View style={styles.approveForm}>
+                <Text style={styles.approveFormTitle}>
+                  อนุมัติ: {approvingUser.full_name || approvingUser.email}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={newShopName}
+                  onChangeText={setNewShopName}
+                  placeholder="ชื่อร้าน"
+                  placeholderTextColor={colors.text.light}
+                />
+                <TextInput
+                  style={[styles.input, { marginTop: 8 }]}
+                  value={newPromptpay}
+                  onChangeText={setNewPromptpay}
+                  placeholder="PromptPay ID (เบอร์โทร / เลขบัตร)"
+                  placeholderTextColor={colors.text.light}
+                  keyboardType="phone-pad"
+                />
+                <View style={styles.roleRow}>
+                  <TouchableOpacity
+                    style={[styles.rolePillSel, { flex: 2 }]}
+                    onPress={() => setApprovingUser(null)}
+                  >
+                    <Text style={styles.rolePillSelText}>ยกเลิก</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rolePillSel, styles.rolePillSelActive, { flex: 3 },
+                      (!newShopName.trim() || !newPromptpay.trim() || isApprovingOwner) && styles.saveButtonDisabled]}
+                    onPress={handleApproveOwner}
+                    disabled={!newShopName.trim() || !newPromptpay.trim() || isApprovingOwner}
+                  >
+                    {isApprovingOwner
+                      ? <ActivityIndicator color={colors.text.inverse} size="small" />
+                      : <Text style={styles.rolePillSelTextActive}>ยืนยันอนุมัติ</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity onPress={fetchPendingUsers} style={styles.refreshRow}>
+              <Ionicons name="refresh-outline" size={14} color={colors.text.light} />
+              <Text style={styles.fieldHint}>รีเฟรชรายการ</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ======================================================
+            OWNER: สร้างบัญชีพนักงาน
+        ====================================================== */}
         {isOwner && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Ionicons name="people-outline" size={18} color={colors.primary} />
-              <Text style={styles.sectionTitle}>จัดการทีม</Text>
+              <Text style={styles.sectionTitle}>จัดการพนักงาน</Text>
             </View>
 
-            {/* Approve new member */}
-            <Text style={styles.fieldLabel}>อนุมัติผู้ใช้ใหม่</Text>
+            <Text style={styles.fieldLabel}>สร้างบัญชีพนักงานใหม่</Text>
             <TextInput
               style={styles.input}
-              value={approveEmail}
-              onChangeText={setApproveEmail}
-              placeholder="อีเมลของผู้ใช้ที่ต้องการอนุมัติ"
+              value={cashierName}
+              onChangeText={setCashierName}
+              placeholder="ชื่อพนักงาน"
+              placeholderTextColor={colors.text.light}
+              editable={!isCreatingCashier}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              value={cashierEmail}
+              onChangeText={setCashierEmail}
+              placeholder="อีเมล (ใช้ login)"
               placeholderTextColor={colors.text.light}
               keyboardType="email-address"
               autoCapitalize="none"
-              editable={!isApproving}
+              editable={!isCreatingCashier}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              value={cashierPassword}
+              onChangeText={setCashierPassword}
+              placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"
+              placeholderTextColor={colors.text.light}
+              secureTextEntry
+              editable={!isCreatingCashier}
             />
 
-            {/* Role selector */}
-            <View style={styles.roleRow}>
-              <TouchableOpacity
-                style={[styles.rolePillSel, approveRole === 'cashier' && styles.rolePillSelActive]}
-                onPress={() => setApproveRole('cashier')}
-              >
-                <Ionicons
-                  name="person-outline"
-                  size={14}
-                  color={approveRole === 'cashier' ? colors.text.inverse : colors.text.secondary}
-                />
-                <Text style={[styles.rolePillSelText, approveRole === 'cashier' && styles.rolePillSelTextActive]}>
-                  แคชเชียร์
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.rolePillSel, approveRole === 'owner' && styles.rolePillSelActive]}
-                onPress={() => setApproveRole('owner')}
-              >
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={14}
-                  color={approveRole === 'owner' ? colors.text.inverse : colors.text.secondary}
-                />
-                <Text style={[styles.rolePillSelText, approveRole === 'owner' && styles.rolePillSelTextActive]}>
-                  เจ้าของ
-                </Text>
-              </TouchableOpacity>
-            </View>
-
             <TouchableOpacity
-              style={[styles.approveButton, (!approveEmail.trim() || isApproving) && styles.saveButtonDisabled]}
-              onPress={handleApprove}
-              disabled={!approveEmail.trim() || isApproving}
+              style={[styles.approveButton, { marginTop: 12 },
+                (!cashierName.trim() || !cashierEmail.trim() || !cashierPassword.trim() || isCreatingCashier)
+                  && styles.saveButtonDisabled]}
+              onPress={handleCreateCashier}
+              disabled={!cashierName.trim() || !cashierEmail.trim() || !cashierPassword.trim() || isCreatingCashier}
               activeOpacity={0.8}
             >
-              {isApproving ? (
+              {isCreatingCashier ? (
                 <ActivityIndicator color={colors.text.inverse} size="small" />
               ) : (
                 <>
-                  <Ionicons name="checkmark-circle-outline" size={16} color={colors.text.inverse} />
-                  <Text style={styles.approveButtonText}>อนุมัติ</Text>
+                  <Ionicons name="person-add-outline" size={16} color={colors.text.inverse} />
+                  <Text style={styles.approveButtonText}>สร้างบัญชีพนักงาน</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -372,7 +482,7 @@ export default function SettingsScreen() {
             {team.length > 0 && (
               <>
                 <View style={styles.teamDivider} />
-                <Text style={styles.fieldLabel}>ทีมงานปัจจุบัน</Text>
+                <Text style={styles.fieldLabel}>พนักงานปัจจุบัน</Text>
                 {team.map((member) => (
                   <View key={member.id} style={styles.teamMemberRow}>
                     <View style={styles.teamMemberAvatar}>
@@ -385,27 +495,18 @@ export default function SettingsScreen() {
                         {member.full_name || '—'}
                       </Text>
                       {member.email ? (
-                        <Text style={styles.teamMemberEmail} numberOfLines={1}>
-                          {member.email}
-                        </Text>
+                        <Text style={styles.teamMemberEmail} numberOfLines={1}>{member.email}</Text>
                       ) : null}
                     </View>
-                    <View style={[
-                      styles.teamRoleBadge,
-                      member.role === 'owner' ? styles.teamRoleBadgeOwner : styles.teamRoleBadgeCashier,
-                    ]}>
-                      <Text style={[
-                        styles.teamRoleText,
-                        member.role === 'owner' ? styles.teamRoleTextOwner : styles.teamRoleTextCashier,
-                      ]}>
+                    <View style={[styles.teamRoleBadge,
+                      member.role === 'owner' ? styles.teamRoleBadgeOwner : styles.teamRoleBadgeCashier]}>
+                      <Text style={[styles.teamRoleText,
+                        member.role === 'owner' ? styles.teamRoleTextOwner : styles.teamRoleTextCashier]}>
                         {member.role === 'owner' ? 'เจ้าของ' : 'พนักงาน'}
                       </Text>
                     </View>
                     {member.id !== profile?.id && (
-                      <TouchableOpacity
-                        style={styles.teamRemoveBtn}
-                        onPress={() => handleRemoveMember(member)}
-                      >
+                      <TouchableOpacity style={styles.teamRemoveBtn} onPress={() => handleRemoveMember(member)}>
                         <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
                       </TouchableOpacity>
                     )}
@@ -413,10 +514,6 @@ export default function SettingsScreen() {
                 ))}
               </>
             )}
-
-            <Text style={styles.fieldHint}>
-              ผู้ใช้ต้องเข้าสู่ระบบด้วย Google ก่อน จึงจะสามารถอนุมัติได้
-            </Text>
           </View>
         )}
 
@@ -750,5 +847,35 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   teamRemoveBtn: {
     padding: 4,
+  },
+  emptyTeam: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  emptyTeamText: {
+    fontSize: 13,
+    color: colors.text.light,
+  },
+  approveForm: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  approveFormTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 10,
+  },
+  refreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 12,
+    alignSelf: 'center',
   },
 });

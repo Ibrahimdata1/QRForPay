@@ -25,7 +25,7 @@ export default function PendingScreen() {
     <View style={styles.container}>
       {/* Top gradient accent */}
       <LinearGradient
-        colors={colors.gradient.primary}
+        colors={colors.gradient.primary as any}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.topAccent}
