@@ -30,24 +30,28 @@ function AppShell() {
     initialize();
   }, []);
 
+  const profile = useAuthStore((s) => s.profile);
+
   useEffect(() => {
     // Customer self-ordering pages are public — never redirect them.
-    // We check pathname HERE (not just in the isInitialized guard) so that even
-    // if this effect fires before isInitialized, we do not redirect a customer.
     if (isPublicRoute(pathname)) return;
     if (!isInitialized) return;
-    if (user) {
-      router.replace('/(pos)');
-    } else {
+
+    if (!user) {
       router.replace('/(auth)/login');
+      return;
     }
-  // pathname is intentionally excluded from deps: re-running on every tab
-  // navigation would call router.replace() on each tab press, creating a ghost
-  // navigation layer that blocks all touch events.
-  // The public-route guard above is safe because public routes are never
-  // user-session-dependent and the pathname is stable once the URL is set.
+
+    // Pending: signed in via Google but not yet approved by owner
+    if (profile === null || profile.role === null) {
+      router.replace('/(auth)/pending');
+      return;
+    }
+
+    router.replace('/(pos)');
+  // pathname intentionally excluded — see comment in previous version
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized, user]);
+  }, [isInitialized, user, profile?.role]);
 
   // Always render the Stack so that:
   // 1. Public routes (customer QR page) are never blocked by auth loading.
@@ -67,6 +71,7 @@ function AppShell() {
         }}
       >
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/pending" options={{ headerShown: false }} />
         <Stack.Screen name="(pos)" options={{ headerShown: false }} />
         {/* Customer self-ordering — no auth required, opened via table QR code */}
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />

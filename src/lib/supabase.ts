@@ -7,6 +7,6 @@ export const supabase = createClient(Config.supabase.url, Config.supabase.anonKe
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: typeof window !== 'undefined' && typeof document !== 'undefined',
   },
 })

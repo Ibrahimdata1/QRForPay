@@ -11,17 +11,50 @@ interface User {
   email: string
 }
 
+export interface TeamMember {
+  id: string
+  email?: string
+  full_name?: string
+  role: 'owner' | 'cashier' | null
+  avatar_url?: string
+}
+
 interface AuthState {
   user: User | null
   profile: Profile | null
   shop: Shop | null
+  team: TeamMember[]
   isLoading: boolean
   isInitialized: boolean
 
   initialize: () => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
+  signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   registerPushToken: (userId: string) => Promise<void>
+  fetchTeam: () => Promise<void>
+  approveUser: (email: string, role: 'owner' | 'cashier') => Promise<void>
+  removeTeamMember: (profileId: string) => Promise<void>
+}
+
+async function loadProfileAndShop(userId: string) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
+
+  let shop = null
+  if (profile?.shop_id) {
+    const { data } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('id', profile.shop_id)
+      .single()
+    shop = data
+  }
+
+  return { profile: profile as Profile | null, shop: shop as Shop | null }
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
     user: null,
     profile: null,
     shop: null,
+    team: [],
     isLoading: false,
     isInitialized: false,
 
@@ -42,36 +76,21 @@ export const useAuthStore = create<AuthState>()(
 
         if (session?.user) {
           const user = { id: session.user.id, email: session.user.email! }
-
-          // Fetch profile
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-
-          // Fetch shop
-          let shop = null
-          if (profile?.shop_id) {
-            const { data } = await supabase
-              .from('shops')
-              .select('*')
-              .eq('id', profile.shop_id)
-              .single()
-            shop = data
-          }
+          const { profile, shop } = await loadProfileAndShop(user.id)
 
           set((state) => {
             state.user = user
-            state.profile = profile as Profile
-            state.shop = shop as Shop
+            state.profile = profile
+            state.shop = shop
           })
 
-          // Register push token (best-effort, non-blocking)
-          get().registerPushToken(user.id)
+          // Register push token only for approved users
+          if (profile?.role) {
+            get().registerPushToken(user.id)
+          }
         }
-      } catch (err) {
-        // Session expired or invalid - user needs to sign in again
+      } catch {
+        // Session expired or invalid — user needs to sign in again
       } finally {
         set((state) => {
           state.isLoading = false
@@ -94,30 +113,9 @@ export const useAuthStore = create<AuthState>()(
         if (error) throw error
 
         const user = { id: data.user.id, email: data.user.email! }
+        const { profile, shop } = await loadProfileAndShop(user.id)
 
-        // Fetch profile
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single()
-
-        if (profileError) throw profileError
-
-        // Fetch shop
-        let shop = null
-        if (profile?.shop_id) {
-          const { data: shopData } = await supabase
-            .from('shops')
-            .select('*')
-            .eq('id', profile.shop_id)
-            .single()
-          shop = shopData
-        }
-
-        // Guard: if the incoming shop differs from what was previously loaded
-        // (e.g. a different account signed in without a proper sign-out), clear
-        // any stale cart data before populating the new session.
+        // Guard: clear stale cart when shop changes
         const previousShopId = get().shop?.id
         const incomingShopId = (shop as Shop | null)?.id ?? profile?.shop_id ?? null
         if (previousShopId && incomingShopId && previousShopId !== incomingShopId) {
@@ -126,13 +124,69 @@ export const useAuthStore = create<AuthState>()(
 
         set((state) => {
           state.user = user
-          state.profile = profile as Profile
-          state.shop = shop as Shop
+          state.profile = profile
+          state.shop = shop
           state.isLoading = false
         })
 
-        // Register push token (best-effort, non-blocking)
-        get().registerPushToken(user.id)
+        if (profile?.role) {
+          get().registerPushToken(user.id)
+        }
+      } catch (err) {
+        set((state) => {
+          state.isLoading = false
+        })
+        throw err
+      }
+    },
+
+    signInWithGoogle: async () => {
+      set((state) => {
+        state.isLoading = true
+      })
+
+      try {
+        if (Platform.OS === 'web') {
+          // Web: full-page redirect — Supabase handles session via detectSessionInUrl
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: (window as any).location.origin,
+            },
+          })
+          if (error) throw error
+          // Page will redirect; isLoading stays true until redirect completes
+          return
+        }
+
+        // Native: open browser + exchange code manually
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const WebBrowser = require('expo-web-browser')
+
+        const redirectUrl = 'qrforpay://auth/callback'
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+            skipBrowserRedirect: true,
+          },
+        })
+
+        if (error) throw error
+        if (!data.url) throw new Error('ไม่ได้รับ OAuth URL จาก Supabase')
+
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl)
+
+        if (result.type === 'success' && result.url) {
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url)
+          if (sessionError) throw sessionError
+          // Re-initialize to load profile/shop
+          await get().initialize()
+        } else {
+          set((state) => {
+            state.isLoading = false
+          })
+        }
       } catch (err) {
         set((state) => {
           state.isLoading = false
@@ -142,33 +196,27 @@ export const useAuthStore = create<AuthState>()(
     },
 
     signOut: async () => {
-      // Clear local state FIRST so navigation to login happens immediately
-      // even if the Supabase network call fails (e.g. offline mode).
       useCartStore.getState().clearResumeOrder()
       useCartStore.getState().clearCart()
       set((state) => {
         state.user = null
         state.profile = null
         state.shop = null
+        state.team = []
       })
 
-      // Best-effort server-side sign-out (revokes token).
-      // Non-critical — local state already cleared above.
       try {
         await supabase.auth.signOut()
       } catch {
-        // Ignore — user is already signed out locally.
+        // Ignore — user is already signed out locally
       }
     },
 
     registerPushToken: async (userId: string) => {
       try {
-        // Push notifications require a development build — not available in Expo Go (SDK 53+)
         if (Platform.OS === 'web') return
-        if (Constants.executionEnvironment === 'storeClient') return // Expo Go — skip silently
+        if (Constants.executionEnvironment === 'storeClient') return
 
-        // require() instead of dynamic import() — jest.mock() can intercept require
-        // but cannot reliably intercept import() in Jest's CommonJS transform mode.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const Notifications = require('expo-notifications')
 
@@ -202,6 +250,53 @@ export const useAuthStore = create<AuthState>()(
       } catch {
         // Non-critical: push notifications are best-effort
       }
+    },
+
+    fetchTeam: async () => {
+      const shop = get().shop
+      if (!shop?.id) return
+
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, avatar_url')
+          .eq('shop_id', shop.id)
+          .order('created_at', { ascending: true })
+
+        set((state) => {
+          state.team = (data ?? []) as TeamMember[]
+        })
+      } catch {
+        // Non-critical
+      }
+    },
+
+    approveUser: async (email: string, role: 'owner' | 'cashier') => {
+      const shop = get().shop
+      if (!shop?.id) throw new Error('ไม่พบข้อมูลร้าน')
+
+      const { error } = await supabase.rpc('approve_pending_user', {
+        p_email: email.trim().toLowerCase(),
+        p_role: role,
+        p_shop_id: shop.id,
+      })
+
+      if (error) throw error
+
+      // Refresh team list
+      await get().fetchTeam()
+    },
+
+    removeTeamMember: async (profileId: string) => {
+      const { error } = await supabase.rpc('remove_team_member', {
+        p_profile_id: profileId,
+      })
+
+      if (error) throw error
+
+      set((state) => {
+        state.team = state.team.filter((m) => m.id !== profileId)
+      })
     },
   }))
 )

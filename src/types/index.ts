@@ -12,10 +12,10 @@ export interface Shop {
 
 export interface Profile {
   id: string
-  email: string
+  email?: string              // populated for OAuth users; may be absent for legacy rows
   full_name: string
-  role: 'owner' | 'cashier'
-  shop_id: string
+  role: 'owner' | 'cashier' | null  // null = pending owner approval
+  shop_id: string | null      // null until approved
   avatar_url?: string
   push_token?: string | null
   created_at: string

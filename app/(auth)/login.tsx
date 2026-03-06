@@ -29,7 +29,9 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
+  const [googleError, setGoogleError] = useState('');
   const signIn = useAuthStore((s) => s.signIn);
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
   const isLoading = useAuthStore((s) => s.isLoading);
 
   const handleLogin = async () => {
@@ -38,11 +40,24 @@ export default function LoginScreen() {
       return;
     }
     setError('');
+    setGoogleError('');
     try {
       await signIn(email.trim(), password);
       router.replace('/(pos)');
     } catch (err: any) {
       setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    setGoogleError('');
+    try {
+      await signInWithGoogle();
+      // On native: _layout.tsx handles redirect after initialize() completes
+      // On web: full-page redirect happens, so nothing to do here
+    } catch (err: any) {
+      setGoogleError(err.message || 'เข้าสู่ระบบ Google ไม่สำเร็จ');
     }
   };
 
@@ -145,6 +160,31 @@ export default function LoginScreen() {
             <Text style={styles.loginButtonText}>เข้าสู่ระบบ</Text>
           )}
         </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>หรือ</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Google Sign-In */}
+        <TouchableOpacity
+          style={[styles.googleButton, isLoading && styles.loginButtonDisabled]}
+          onPress={handleGoogleLogin}
+          activeOpacity={0.8}
+          disabled={isLoading}
+        >
+          {/* Google "G" icon via colored squares */}
+          <View style={styles.googleIcon}>
+            <Text style={styles.googleIconText}>G</Text>
+          </View>
+          <Text style={styles.googleButtonText}>เข้าสู่ระบบด้วย Google</Text>
+        </TouchableOpacity>
+
+        {googleError ? (
+          <Text style={styles.errorText}>{googleError}</Text>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );
@@ -268,5 +308,51 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontSize: 12,
+    color: colors.text.light,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    height: 52,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    ...shadow.sm,
+  },
+  googleIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#4285F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  googleButtonText: {
+    color: colors.text.primary,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
