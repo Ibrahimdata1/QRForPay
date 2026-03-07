@@ -39,6 +39,18 @@ export default function ProductsScreen() {
   const [formVisible, setFormVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  const canReorder = isOwner && !search.trim();
+
+  const handleMove = useCallback((itemId: string, direction: 'up' | 'down') => {
+    const idx = products.findIndex((p) => p.id === itemId);
+    if (idx < 0) return;
+    const newList = [...products];
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= newList.length) return;
+    [newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]];
+    reorderProducts(newList.map((p) => p.id));
+  }, [products, reorderProducts]);
+
 
   useEffect(() => {
     if (shop?.id) {
@@ -68,8 +80,29 @@ export default function ProductsScreen() {
 
   const renderProductContent = useCallback(({ item }: { item: Product }) => {
     const stockColor = getStockColor(item.stock);
+    const idx = products.findIndex((p) => p.id === item.id);
     return (
       <View style={styles.productRow}>
+        {/* Up/Down reorder — owner only, no search */}
+        {canReorder && (
+          <View style={styles.reorderBtns}>
+            <TouchableOpacity
+              onPress={() => handleMove(item.id, 'up')}
+              disabled={idx === 0}
+              style={[styles.reorderBtn, idx === 0 && styles.reorderBtnDisabled]}
+            >
+              <Ionicons name="chevron-up" size={14} color={idx === 0 ? colors.text.light : colors.text.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleMove(item.id, 'down')}
+              disabled={idx === products.length - 1}
+              style={[styles.reorderBtn, idx === products.length - 1 && styles.reorderBtnDisabled]}
+            >
+              <Ionicons name="chevron-down" size={14} color={idx === products.length - 1 ? colors.text.light : colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Left accent bar */}
         <View style={[styles.accentBar, { backgroundColor: stockColor }]} />
 
@@ -136,7 +169,7 @@ export default function ProductsScreen() {
         )}
       </View>
     );
-  }, [isOwner, categoryMap, colors]);
+  }, [isOwner, canReorder, categoryMap, colors, products, handleMove]);
 
   // Guard: super_admin has no shop — show admin empty state
   if (!shop) {
@@ -333,6 +366,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  reorderBtns: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginRight: 4,
+    gap: 0,
+  },
+  reorderBtn: {
+    padding: 4,
+  },
+  reorderBtnDisabled: {
+    opacity: 0.3,
   },
   editBtn: {
     padding: 8,
