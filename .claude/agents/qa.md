@@ -228,25 +228,16 @@ Sign-off: APPROVED / REJECTED (เหตุผล)
 - [ ] Image ที่โหลดจาก remote ใช้ `{ cache: 'force-cache' }` หรือ cached image library
 - [ ] ไม่มี `useEffect` ที่ทำงานทุก render (missing dependency หรือ dependency เปลี่ยนทุกรอบ)
 
-### Step 4f — Floating Element / Interactive Overlap Audit
+### Step 4f — Input Edge Cases + UI Overlap (Skills)
 
-**FAB หรือ absolute-positioned element ที่ลอยทับ interactive element ล่างสุด = bug จริง ไม่ใช่แค่ UI**
+**รัน 2 skills นี้ทุกครั้ง — ครอบคลุม bug class ที่เคยเกิดใน production จริง**
 
-ทุกครั้งที่มี `position: 'absolute'` บน button/FAB/toolbar ลอยเหนือ list:
-
-- [ ] คำนวณ "dead zone" = `bottom` + `height` (เช่น FAB `bottom:24, height:56` → dead zone = 80px)
-- [ ] `contentContainerStyle` ของ list ต้องมี `paddingBottom` ≥ dead zone + buffer (แนะนำ +16px)
-  - ✓ ถูก: `paddingBottom: 100` เมื่อ FAB อยู่ที่ bottom:24, height:56
-  - ✗ ผิด: `paddingBottom: 0` หรือไม่มีเลย — item สุดท้ายกดไม่ได้
-- [ ] ตรวจ FlatList, SectionList, ScrollView, DraggableFlatList — ทุกประเภท
-- [ ] ถ้า list มี action buttons ต่อ item (edit/delete) → ต้องกดได้ทุก item รวมถึง item สุดท้าย
-- [ ] ถ้า tab bar อยู่ล่าง → `paddingBottom` ต้องบวก tab bar height ด้วย (ปกติ ~83px บน iOS)
-
-**Pattern ที่ต้องตรวจ (grep):**
 ```
-position.*absolute.*bottom   ← FAB หรือ toolbar
-contentContainerStyle        ← ต้องมี paddingBottom พอ
+/qa-input-edge-cases   ← ตรวจ TextInput ทุกช่อง: เลขผสมอักษร, ทศนิยมผิด, ลบ, NaN, maxLength
+/qa-ui-overlap         ← ตรวจ FAB/absolute overlay บัง interactive items ล่างสุด
 ```
+
+ทั้งสอง skills อยู่ใน `~/.claude/skills/` — เรียกใช้ผ่าน Skill tool
 
 ### Step 4e — Over-Engineering Detection (จาก code-quality-pragmatist)
 
