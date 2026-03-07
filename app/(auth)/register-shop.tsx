@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTheme, ThemeColors } from '../../constants/ThemeContext';
 import { radius, shadow } from '../../constants/theme';
@@ -45,7 +46,7 @@ export default function RegisterShopScreen() {
     setIsSubmitting(true);
     try {
       await submitOwnerInfo(shopName.trim(), promptpayId.trim());
-      // _layout.tsx will detect pending_shop_name set → redirect to /pending
+      router.replace('/(auth)/pending');
     } catch (err: any) {
       setError(err.message || 'ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่');
     } finally {
