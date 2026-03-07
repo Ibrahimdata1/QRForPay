@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,8 +18,6 @@ export default function PendingScreen() {
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
-  const initialize = useAuthStore((s) => s.initialize);
-  const isLoading = useAuthStore((s) => s.isLoading);
 
   return (
     <View style={styles.container}>
@@ -73,25 +70,8 @@ export default function PendingScreen() {
 
         <Text style={styles.hint}>
           admin จะอนุมัติบัญชีของคุณเร็ว ๆ นี้{'\n'}
-          กด "ตรวจสอบสถานะ" เมื่อได้รับแจ้ง
+          หน้านี้จะอัปเดตอัตโนมัติเมื่อได้รับการอนุมัติ
         </Text>
-
-        {/* Refresh button */}
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={initialize}
-          activeOpacity={0.8}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={colors.primary} size="small" />
-          ) : (
-            <>
-              <Ionicons name="refresh-outline" size={18} color={colors.primary} />
-              <Text style={styles.refreshText}>ตรวจสอบสถานะ</Text>
-            </>
-          )}
-        </TouchableOpacity>
 
         {/* Sign out */}
         <TouchableOpacity
@@ -200,23 +180,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 28,
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    height: 48,
-    width: '100%',
-    marginBottom: 12,
-  },
-  refreshText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary,
   },
   signOutButton: {
     flexDirection: 'row',
