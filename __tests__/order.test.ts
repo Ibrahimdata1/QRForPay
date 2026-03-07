@@ -612,3 +612,123 @@ describe('OrderStore — per-item cancellation', () => {
     ).rejects.toMatchObject({ message: 'item update failed' });
   });
 });
+
+// ─── cancelOrder ──────────────────────────────────────────────────────────────
+
+describe('OrderStore — cancelOrder', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupMockChain();
+  });
+
+  test('cancels order and updates local state', async () => {
+    const eqChain: any = { eq: mockEq, order: mockOrderBy, select: mockSelect, single: mockSingle, limit: mockLimit };
+    mockEq
+      .mockResolvedValueOnce({ error: null })   // orders UPDATE .eq
+      .mockReturnValue(eqChain);                // payments UPDATE first .eq → chainable
+
+    useOrderStore.setState({
+      orders: [{ id: 'order-1', status: 'pending', items: [] } as any],
+    });
+
+    const store = useOrderStore.getState();
+    await store.cancelOrder('order-1', 'cashier-1');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled', cancelled_by: 'cashier-1' })
+    );
+    expect(useOrderStore.getState().orders.find((o) => o.id === 'order-1')?.status).toBe('cancelled');
+  });
+
+  test('throws when DB update fails', async () => {
+    mockEq.mockResolvedValueOnce({ error: { message: 'cancel failed' } });
+
+    const store = useOrderStore.getState();
+    await expect(store.cancelOrder('order-1', 'cashier-1')).rejects.toMatchObject({ message: 'cancel failed' });
+  });
+});
+
+// ─── fetchOrderHistory ────────────────────────────────────────────────────────
+
+describe('OrderStore — fetchOrderHistory', () => {
+  const mockGte = jest.fn();
+  const mockLt = jest.fn();
+  const mockIn = jest.fn();
+  const mockRange = jest.fn();
+
+  function setupHistoryChain(result: any) {
+    const chain: any = {
+      eq: jest.fn().mockReturnThis(),
+      gte: mockGte,
+      lt: mockLt,
+      in: mockIn,
+      order: jest.fn().mockReturnThis(),
+      range: mockRange,
+    };
+    mockGte.mockReturnValue(chain);
+    mockLt.mockReturnValue(chain);
+    mockIn.mockReturnValue(chain);
+    chain.order.mockReturnValue(chain);
+    mockRange.mockResolvedValue(result);
+    mockSelect.mockReturnValue(chain);
+    mockFrom.mockReturnValue({ select: mockSelect });
+    return chain;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useOrderStore.setState({ historyOrders: [], historyTotal: 0, historyLoading: false } as any);
+  });
+
+  test('happy path: populates historyOrders and historyTotal', async () => {
+    const orders = [{ id: 'h1', status: 'completed', payment: null, cancelled_by_profile: null }];
+    setupHistoryChain({ data: orders, error: null, count: 42 });
+
+    await useOrderStore.getState().fetchOrderHistory(
+      'shop-1',
+      { start: '2026-03-01', end: '2026-03-08' },
+      'all', 15, 0
+    );
+
+    const state = useOrderStore.getState();
+    expect(state.historyTotal).toBe(42);
+    expect(state.historyLoading).toBe(false);
+    expect(state.historyOrders).toHaveLength(1);
+  });
+
+  test('statusFilter=completed uses .eq(status) instead of .in()', async () => {
+    setupHistoryChain({ data: [], error: null, count: 0 });
+
+    await useOrderStore.getState().fetchOrderHistory(
+      'shop-1',
+      { start: '2026-03-01', end: '2026-03-08' },
+      'completed', 15, 0
+    );
+
+    expect(mockIn).not.toHaveBeenCalled();
+  });
+
+  test('offset > 0: appends to historyOrders instead of replacing', async () => {
+    const existing = [{ id: 'h0', status: 'completed', payment: null, cancelled_by_profile: null }];
+    useOrderStore.setState({ historyOrders: existing as any, historyTotal: 0, historyLoading: false } as any);
+
+    const newOrders = [{ id: 'h1', status: 'completed', payment: null, cancelled_by_profile: null }];
+    setupHistoryChain({ data: newOrders, error: null, count: 2 });
+
+    await useOrderStore.getState().fetchOrderHistory(
+      'shop-1', { start: '2026-03-01', end: '2026-03-08' }, 'all', 15, 15
+    );
+
+    expect(useOrderStore.getState().historyOrders).toHaveLength(2);
+  });
+
+  test('DB error: historyLoading resets to false, orders unchanged', async () => {
+    setupHistoryChain({ data: null, error: { message: 'db error' }, count: 0 });
+
+    await expect(
+      useOrderStore.getState().fetchOrderHistory('shop-1', { start: '2026-03-01', end: '2026-03-08' })
+    ).resolves.toBeUndefined();
+
+    expect(useOrderStore.getState().historyLoading).toBe(false);
+  });
+});

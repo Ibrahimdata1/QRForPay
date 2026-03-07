@@ -255,7 +255,9 @@ describe('AuthStore — signIn', () => {
     expect(useAuthStore.getState().user).toBeNull();
   });
 
-  test('profile fetch error: throws and resets isLoading', async () => {
+  test('profile fetch error: signIn succeeds with null profile (loadProfileAndShop swallows error)', async () => {
+    // loadProfileAndShop destructures only `data` — a DB error on profiles
+    // means profile=null but signIn does NOT throw; user can still authenticate
     mockSignInWithPassword.mockResolvedValueOnce({
       data: { user: { id: 'user-1', email: 'test@example.com' } },
       error: null,
@@ -264,9 +266,121 @@ describe('AuthStore — signIn', () => {
 
     await expect(
       useAuthStore.getState().signIn('test@example.com', 'password')
-    ).rejects.toMatchObject({ message: 'profile not found' });
+    ).resolves.toBeUndefined();
 
-    expect(useAuthStore.getState().isLoading).toBe(false);
+    const state = useAuthStore.getState();
+    expect(state.user).toEqual({ id: 'user-1', email: 'test@example.com' });
+    expect(state.profile).toBeNull();
+    expect(state.isLoading).toBe(false);
+  });
+});
+
+// ─── fetchTeam ────────────────────────────────────────────────────────────────
+
+describe('AuthStore — fetchTeam', () => {
+  const mockOrder = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetStore();
+    useAuthStore.setState({ shop: makeShop() } as any);
+    // chain: from('profiles').select(...).eq(...).order(...)
+    mockOrder.mockResolvedValue({ data: [], error: null });
+    mockFrom.mockImplementation(() => ({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({ order: mockOrder }),
+      }),
+    }));
+  });
+
+  test('populates team state with returned profiles', async () => {
+    const members = [
+      { id: 'u1', full_name: 'Alice', role: 'owner', email: 'a@test.com', avatar_url: null },
+      { id: 'u2', full_name: 'Bob', role: 'cashier', email: 'b@test.com', avatar_url: null },
+    ];
+    mockOrder.mockResolvedValueOnce({ data: members, error: null });
+
+    await useAuthStore.getState().fetchTeam();
+
+    expect(useAuthStore.getState().team).toEqual(members);
+  });
+
+  test('returns early when shop is null', async () => {
+    useAuthStore.setState({ shop: null } as any);
+    await useAuthStore.getState().fetchTeam();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  test('DB error: silently swallowed, team stays empty', async () => {
+    mockOrder.mockResolvedValueOnce({ data: null, error: { message: 'fetch failed' } });
+    await expect(useAuthStore.getState().fetchTeam()).resolves.toBeUndefined();
+    expect(useAuthStore.getState().team).toEqual([]);
+  });
+});
+
+// ─── fetchPendingUsers / approveOwner / removeTeamMember ─────────────────────
+
+describe('AuthStore — super admin actions', () => {
+  const mockRpc = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetStore();
+    useAuthStore.setState({ shop: makeShop(), pendingUsers: [] } as any);
+    (require('../src/lib/supabase').supabase as any).rpc = mockRpc;
+  });
+
+  test('fetchPendingUsers: populates pendingUsers on success', async () => {
+    const pending = [{ id: 'p1', email: 'new@test.com', full_name: 'New', created_at: '2026-01-01' }];
+    mockRpc.mockResolvedValueOnce({ data: pending, error: null });
+
+    await useAuthStore.getState().fetchPendingUsers();
+
+    expect(useAuthStore.getState().pendingUsers).toEqual(pending);
+  });
+
+  test('fetchPendingUsers: DB error is swallowed, pendingUsers stays empty', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'permission denied' } });
+    await expect(useAuthStore.getState().fetchPendingUsers()).resolves.toBeUndefined();
+    expect(useAuthStore.getState().pendingUsers).toEqual([]);
+  });
+
+  test('approveOwner: calls rpc and removes user from pendingUsers', async () => {
+    useAuthStore.setState({ pendingUsers: [{ id: 'p1', email: 'x@test.com', created_at: '2026-01-01' }] } as any);
+    mockRpc.mockResolvedValueOnce({ error: null });
+
+    await useAuthStore.getState().approveOwner('p1', 'My Shop', '0812345678');
+
+    expect(mockRpc).toHaveBeenCalledWith('approve_owner_signup', {
+      p_user_id: 'p1', p_shop_name: 'My Shop', p_promptpay: '0812345678',
+    });
+    expect(useAuthStore.getState().pendingUsers).toEqual([]);
+  });
+
+  test('approveOwner: throws on DB error', async () => {
+    mockRpc.mockResolvedValueOnce({ error: { message: 'rpc failed' } });
+    await expect(
+      useAuthStore.getState().approveOwner('p1', 'Shop', '0812345678')
+    ).rejects.toMatchObject({ message: 'rpc failed' });
+  });
+
+  test('removeTeamMember: calls rpc and removes member from team', async () => {
+    useAuthStore.setState({
+      team: [{ id: 'm1', role: 'cashier' }, { id: 'm2', role: 'cashier' }],
+    } as any);
+    mockRpc.mockResolvedValueOnce({ error: null });
+
+    await useAuthStore.getState().removeTeamMember('m1');
+
+    expect(mockRpc).toHaveBeenCalledWith('remove_team_member', { p_profile_id: 'm1' });
+    expect(useAuthStore.getState().team.map((m) => m.id)).toEqual(['m2']);
+  });
+
+  test('removeTeamMember: throws on DB error', async () => {
+    mockRpc.mockResolvedValueOnce({ error: { message: 'cannot remove' } });
+    await expect(
+      useAuthStore.getState().removeTeamMember('m1')
+    ).rejects.toMatchObject({ message: 'cannot remove' });
   });
 });
 
