@@ -83,15 +83,19 @@ export default function CartScreen() {
   const handleApplyDiscount = () => {
     const val = parseFloat(discountInput);
     if (discountType === 'percent') {
-      if (!isNaN(val) && val >= 0 && val <= 100) {
-        applyDiscount(val);
+      if (isNaN(val) || val < 0 || val > 100) {
+        Alert.alert('ส่วนลดไม่ถูกต้อง', 'กรอกตัวเลข 0–100');
+        return;
       }
+      applyDiscount(val);
     } else {
-      if (!isNaN(val) && val >= 0) {
-        const cappedBaht = Math.min(val, subtotal);
-        const pct = subtotal > 0 ? (cappedBaht / subtotal) * 100 : 0;
-        applyDiscount(pct);
+      if (isNaN(val) || val < 0) {
+        Alert.alert('ส่วนลดไม่ถูกต้อง', 'กรอกจำนวนเงินที่ถูกต้อง');
+        return;
       }
+      const cappedBaht = Math.min(val, subtotal);
+      const pct = subtotal > 0 ? (cappedBaht / subtotal) * 100 : 0;
+      applyDiscount(pct);
     }
     setShowDiscountModal(false);
     setDiscountInput('');
@@ -206,8 +210,8 @@ export default function CartScreen() {
 
     const currentTotal = effectiveTotal;
 
-    if (paymentMethod === 'cash' && cashReceivedNum === 0) {
-      Alert.alert('กรุณากรอกจำนวนเงินที่รับมา');
+    if (paymentMethod === 'cash' && (cashReceivedNum <= 0 || isNaN(cashReceivedNum))) {
+      Alert.alert('กรุณากรอกจำนวนเงินที่ถูกต้อง');
       return;
     }
 
@@ -455,10 +459,11 @@ export default function CartScreen() {
             <TextInput
               style={styles.cashInput}
               value={cashReceived}
-              onChangeText={setCashReceived}
+              onChangeText={(t) => setCashReceived(t.replace(/[^0-9.]/g, ''))}
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor={colors.text.light}
+              maxLength={10}
             />
             {cashReceivedNum > 0 && change >= 0 && (
               <Text style={styles.changeText}>
@@ -581,7 +586,7 @@ export default function CartScreen() {
                 keyboardType="numeric"
                 placeholder="0"
                 placeholderTextColor={colors.text.light}
-                maxLength={discountType === 'percent' ? 3 : 7}
+                maxLength={discountType === 'percent' ? 5 : 7}
                 autoFocus
               />
               <Text style={styles.discountPercent}>

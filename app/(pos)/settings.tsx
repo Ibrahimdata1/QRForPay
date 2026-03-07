@@ -98,8 +98,10 @@ export default function SettingsScreen() {
   };
 
   const handlePromptpayChange = (val: string) => {
-    setPromptpayId(val);
-    checkDirty(shopName, val, tableCount);
+    // Allow only digits and dashes (for formatted IDs)
+    const cleaned = val.replace(/[^0-9-]/g, '');
+    setPromptpayId(cleaned);
+    checkDirty(shopName, cleaned, tableCount);
   };
 
   const handleTableCountChange = (val: string) => {
@@ -120,8 +122,9 @@ export default function SettingsScreen() {
       Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อร้าน');
       return;
     }
-    if (!trimmedPromptpay) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอก PromptPay ID');
+    const ppDigits = trimmedPromptpay.replace(/\D/g, '');
+    if (ppDigits.length !== 10 && ppDigits.length !== 13) {
+      Alert.alert('PromptPay ID ไม่ถูกต้อง', 'กรุณากรอกเบอร์โทร (10 หลัก) หรือเลขบัตรประชาชน (13 หลัก)');
       return;
     }
     if (isNaN(parsedTableCount) || parsedTableCount < 1 || parsedTableCount > 100) {

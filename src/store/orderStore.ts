@@ -182,7 +182,14 @@ export const useOrderStore = create<OrderState>()(
       })
 
       try {
-        const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
+        // Fetch existing order_items to accumulate totals correctly
+        const { data: existingItems } = await supabase
+          .from('order_items')
+          .select('subtotal')
+          .eq('order_id', orderId)
+        const existingSubtotal = (existingItems || []).reduce((sum, i) => sum + (i.subtotal ?? 0), 0)
+        const newSubtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
+        const subtotal = existingSubtotal + newSubtotal
         const discountAmount = subtotal * (discount / 100)
         const afterDiscount = subtotal - discountAmount
         const taxAmount = afterDiscount * (taxRate / (1 + taxRate))
@@ -294,6 +301,10 @@ export const useOrderStore = create<OrderState>()(
     },
 
     completeOrder: async (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => {
+      // Guard: skip if already completed
+      const order = get().orders.find((o) => o.id === orderId)
+      if (order?.status === 'completed') return
+
       const { error: paymentError } = await supabase
         .from('payments')
         .update({
@@ -327,6 +338,10 @@ export const useOrderStore = create<OrderState>()(
     },
 
     cancelOrder: async (orderId: string, cancelledBy: string, reason?: string) => {
+      // Guard: only cancel pending/preparing orders
+      const order = get().orders.find((o) => o.id === orderId)
+      if (order && (order.status === 'completed' || order.status === 'cancelled')) return
+
       const now = new Date().toISOString()
 
       const { error: orderError } = await supabase

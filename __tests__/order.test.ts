@@ -641,6 +641,9 @@ describe('OrderStore — cancelOrder', () => {
   });
 
   test('throws when DB update fails', async () => {
+    useOrderStore.setState({
+      orders: [{ id: 'order-1', status: 'pending', items: [] } as any],
+    });
     mockEq.mockResolvedValueOnce({ error: { message: 'cancel failed' } });
 
     const store = useOrderStore.getState();

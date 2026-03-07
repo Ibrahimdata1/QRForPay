@@ -85,7 +85,7 @@ export function QRPaymentModal({
   };
 
   // L-4: Use proper EMVCo PromptPay payload; promptPayId should be fetched from the shop row (H-4).
-  const qrData = qrPayload || (promptPayId ? generatePromptPayPayload(promptPayId, amount) : '');
+  const qrData = qrPayload || (promptPayId && amount > 0 ? generatePromptPayPayload(promptPayId, amount) : '');
 
   return (
     <View style={styles.container}>
@@ -207,7 +207,9 @@ export function QRPaymentModal({
                   if (isConfirming.current) return;
                   isConfirming.current = true;
                   setShowConfirmModal(false);
-                  onManualConfirm?.();
+                  Promise.resolve(onManualConfirm?.()).finally(() => {
+                    isConfirming.current = false;
+                  });
                 }}
                 activeOpacity={0.8}
               >

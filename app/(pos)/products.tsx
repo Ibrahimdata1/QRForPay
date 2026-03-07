@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { shadow, radius } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,12 +35,15 @@ export default function ProductsScreen() {
 
   const saveProduct = useProductStore((s) => s.saveProduct);
   const deleteProduct = useProductStore((s) => s.deleteProduct);
+  const reorderProducts = useProductStore((s) => s.reorderProducts);
   const [search, setSearch] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  const canReorder = isOwner && !search.trim();
+
   useEffect(() => {
-    if (shop?.id && products.length === 0) {
+    if (shop?.id) {
       fetchProducts(shop.id);
       fetchCategories(shop.id);
     }
@@ -64,10 +68,17 @@ export default function ProductsScreen() {
     return '#6B7280';                    // เยอะ — เทาเป็นกลาง
   };
 
-  const renderProduct = ({ item }: { item: Product }) => {
+  const renderProductContent = useCallback((item: Product, drag?: () => void, isActive?: boolean) => {
     const stockColor = getStockColor(item.stock);
     return (
-      <View style={styles.productRow}>
+      <View style={[styles.productRow, isActive && styles.productRowActive]}>
+        {/* Drag handle — owner only, no search */}
+        {canReorder && (
+          <TouchableOpacity onPressIn={drag} style={styles.dragHandle}>
+            <Ionicons name="reorder-three" size={20} color={colors.text.light} />
+          </TouchableOpacity>
+        )}
+
         {/* Left accent bar */}
         <View style={[styles.accentBar, { backgroundColor: stockColor }]} />
 
@@ -93,7 +104,7 @@ export default function ProductsScreen() {
         </View>
 
         {/* Price */}
-        <Text style={styles.productPrice}>฿{item.price.toFixed(0)}</Text>
+        <Text style={styles.productPrice}>฿{(item.price ?? 0).toFixed(0)}</Text>
 
         {/* Stock badge */}
         <View style={[styles.stockBadge, { backgroundColor: stockColor + '18', borderColor: stockColor + '40' }]}>
@@ -134,7 +145,21 @@ export default function ProductsScreen() {
         )}
       </View>
     );
-  };
+  }, [canReorder, isOwner, categoryMap, colors]);
+
+  const renderDraggableItem = useCallback(({ item, drag, isActive }: RenderItemParams<Product>) => (
+    <ScaleDecorator>
+      {renderProductContent(item, drag, isActive)}
+    </ScaleDecorator>
+  ), [renderProductContent]);
+
+  const renderFlatItem = useCallback(({ item }: { item: Product }) => (
+    renderProductContent(item)
+  ), [renderProductContent]);
+
+  const handleDragEnd = useCallback(({ data }: { data: Product[] }) => {
+    reorderProducts(data.map(p => p.id));
+  }, [reorderProducts]);
 
   // Guard: super_admin has no shop — show admin empty state
   if (!shop) {
@@ -179,20 +204,38 @@ export default function ProductsScreen() {
           />
         ) : null}
       </View>
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProduct}
-        contentContainerStyle={styles.listContent}
-        onRefresh={() => shop?.id && fetchProducts(shop.id)}
-        refreshing={isLoading}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="cube-outline" size={48} color={colors.text.light} />
-            <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
-          </View>
-        }
-      />
+      {canReorder ? (
+        <DraggableFlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDraggableItem}
+          onDragEnd={handleDragEnd}
+          contentContainerStyle={styles.listContent}
+          onRefresh={() => { if (shop?.id) { fetchProducts(shop.id); fetchCategories(shop.id); } }}
+          refreshing={isLoading}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={48} color={colors.text.light} />
+              <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={renderFlatItem}
+          contentContainerStyle={styles.listContent}
+          onRefresh={() => { if (shop?.id) { fetchProducts(shop.id); fetchCategories(shop.id); } }}
+          refreshing={isLoading}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={48} color={colors.text.light} />
+              <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
+            </View>
+          }
+        />
+      )}
       <TouchableOpacity
         style={styles.fabWrapper}
         onPress={() => { setEditingProduct(null); setFormVisible(true); }}
@@ -242,6 +285,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
+    paddingBottom: 100,
   },
   productRow: {
     flexDirection: 'row',
@@ -251,6 +295,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     ...shadow.sm,
+  },
+  productRowActive: {
+    opacity: 0.85,
+    ...shadow.lg,
+  },
+  dragHandle: {
+    paddingRight: 8,
+    paddingVertical: 4,
   },
   productInfo: {
     flex: 1,

@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { QRPaymentModal } from '../components/QRPaymentModal';
 import { useOrderStore } from '../src/store/orderStore';
@@ -18,6 +18,13 @@ export default function QRPaymentScreen() {
   const profile = useAuthStore((s) => s.profile);
   const shop = useAuthStore((s) => s.shop);
   const clearCart = useCartStore((s) => s.clearCart);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (currentOrder) return;
+    const t = setTimeout(() => setLoadTimedOut(true), 10000);
+    return () => clearTimeout(t);
+  }, [currentOrder]);
 
   useEffect(() => {
     if (!orderId) return;
@@ -47,7 +54,7 @@ export default function QRPaymentScreen() {
   const handleCancel = async () => {
     if (orderId) {
       try {
-        await useOrderStore.getState().updateOrderStatus(orderId, 'cancelled');
+        await useOrderStore.getState().cancelOrder(orderId, profile?.id ?? '');
       } catch {
         // Best effort cancellation
       }
@@ -58,18 +65,29 @@ export default function QRPaymentScreen() {
   const handleExpired = async () => {
     if (orderId) {
       try {
-        await useOrderStore.getState().updateOrderStatus(orderId, 'cancelled');
+        await useOrderStore.getState().cancelOrder(orderId, profile?.id ?? '');
       } catch {
         // Best effort
       }
     }
   };
 
-  if (!orderId || !currentOrder) {
+  if (!orderId || (!currentOrder && !loadTimedOut)) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading order...</Text>
+      </View>
+    );
+  }
+
+  if (!currentOrder) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.loadingText}>ไม่พบออเดอร์ กรุณาลองใหม่</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+          <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>กลับ</Text>
+        </TouchableOpacity>
       </View>
     );
   }

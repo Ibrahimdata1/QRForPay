@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Stack, Redirect, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../src/store/authStore';
 import { useOrderStore } from '../src/store/orderStore';
 import { useFonts } from 'expo-font';
@@ -146,8 +147,10 @@ const rootStyles = StyleSheet.create({
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AppShell />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AppShell />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

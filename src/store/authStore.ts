@@ -5,6 +5,7 @@ import { Profile, Shop } from '../types'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { useCartStore } from './cartStore'
+import { useProductStore } from './productStore'
 
 interface User {
   id: string
@@ -240,6 +241,7 @@ export const useAuthStore = create<AuthState>()(
     signOut: async () => {
       useCartStore.getState().clearResumeOrder()
       useCartStore.getState().clearCart()
+      useProductStore.setState({ products: [], categories: [] })
       set((state) => {
         state.user = null
         state.profile = null

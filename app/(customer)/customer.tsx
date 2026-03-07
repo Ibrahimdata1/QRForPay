@@ -205,9 +205,16 @@ export default function CustomerOrderScreen() {
   }, [shopId, tableNumber]);
 
   // ── load menu ──────────────────────────────────────────────────────────────
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   useEffect(() => {
     if (!shopId) {
       setError('ไม่พบข้อมูลร้าน กรุณาสแกน QR ใหม่');
+      setScreen('error');
+      return;
+    }
+    if (!UUID_RE.test(shopId)) {
+      setError('QR Code ไม่ถูกต้อง กรุณาสแกนใหม่');
       setScreen('error');
       return;
     }
@@ -325,6 +332,10 @@ export default function CustomerOrderScreen() {
   );
 
   const addToCart = (item: MenuItem) => {
+    if ((item as any).stock === 0) {
+      webAlert('สินค้าหมด', `"${item.name}" หมดแล้ว ไม่สามารถเพิ่มในตะกร้าได้`);
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((e) => e.item.id === item.id);
       if (existing) {
@@ -362,6 +373,7 @@ export default function CustomerOrderScreen() {
   // ── place order ────────────────────────────────────────────────────────────
   const placeOrder = useCallback(async () => {
     if (cart.length === 0) return;
+    if (cartTotal <= 0) return;
 
     const cartSnapshot = [...cart];
     const totalSnapshot = cartTotal;

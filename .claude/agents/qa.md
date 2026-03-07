@@ -177,22 +177,81 @@ npx jest --coverage
 Test Results: X/Y passed | coverage: branches X%, functions X%
 Feature Check: [PASS/FAIL per feature]
 Multi-Tenant Isolation: [PASS/FAIL per item]
+Web Production Checklist: [PASS/FAIL per item]
+Stub Detection: [CLEAN / n issues found]
+Test Prioritization: CRITICAL coverage X% | HIGH coverage X%
+Performance Anti-Patterns: [CLEAN / n issues found]
+Over-Engineering: [CLEAN / n issues found]
 Integration Gaps: [list]
 New Tests Added: [list ถ้ามี]
 Sign-off: APPROVED / REJECTED (เหตุผล)
 ```
 
+### Step 4b — Stub / Fake Implementation Detection (จาก task-completion-validator)
+
+**ห้ามให้ code ที่ "ดูเหมือนเสร็จ" แต่จริงๆ ไม่ทำงาน ผ่าน QA**
+
+- [ ] ค้นหา `TODO`, `FIXME`, `HACK`, `XXX` ใน codebase — ถ้าอยู่ใน flow หลัก = REJECT
+- [ ] ตรวจ empty catch blocks: `catch (e) {}` หรือ `catch { }` — ต้องมี error handling จริง
+- [ ] ตรวจ hardcoded/mock data ที่หลงเหลือใน production code (เช่น `SAMPLE_ORDERS`, `SAMPLE_PRODUCTS`)
+- [ ] ตรวจ console.log ที่ค้างอยู่ — ยกเว้น `__DEV__` guard
+- [ ] ตรวจ Supabase calls → ต้องเป็น real connection ไม่ใช่ mock client ใน production
+- [ ] ตรวจ commented-out code blocks ขนาดใหญ่ (>10 lines) — ต้องลบหรือมีเหตุผล
+
+### Step 4c — ROI-Based Test Prioritization (จาก senaiverse test-generator)
+
+**สูตร: Priority = Complexity x Criticality**
+
+| Priority | Features | ต้องมี Test ประเภท |
+|----------|----------|-------------------|
+| CRITICAL | payments, QR generation, auth, order creation | Unit + Integration + edge cases ครบ |
+| HIGH | cart operations, stock management, order status flow | Unit + Integration |
+| MEDIUM | product CRUD, category filter, search | Unit tests |
+| LOW | UI display, badges, formatting | Snapshot หรือ skip ได้ |
+
+- [ ] Features ระดับ CRITICAL ต้องมี coverage ≥ 90%
+- [ ] Features ระดับ HIGH ต้องมี coverage ≥ 70%
+- [ ] ถ้าพบ CRITICAL feature ที่ไม่มี test → ต้องเขียนเพิ่มก่อน sign-off
+
+### Step 4d — React Native Performance Baseline (จาก Callstack Best Practices)
+
+**ตรวจ code-level performance issues ที่ทำให้แอพช้า**
+
+- [ ] Lists ใช้ FlatList/FlashList — ห้ามใช้ ScrollView กับ list ยาว (>20 items)
+- [ ] ไม่มี barrel imports (`import { x } from './index'`) — import ตรงจาก source file
+- [ ] Zustand selectors เป็น atomic — ไม่ return ทั้ง store object
+  - ถูก: `useCartStore(s => s.items)`
+  - ผิด: `useCartStore()` แล้วใช้ `.items`
+- [ ] ไม่มี inline function/object ใน JSX ที่ทำให้ re-render ทุก cycle
+  - ผิด: `style={{ margin: 10 }}` ใน FlatList renderItem
+  - ถูก: `StyleSheet.create` หรือ NativeWind className
+- [ ] Image ที่โหลดจาก remote ใช้ `{ cache: 'force-cache' }` หรือ cached image library
+- [ ] ไม่มี `useEffect` ที่ทำงานทุก render (missing dependency หรือ dependency เปลี่ยนทุกรอบ)
+
+### Step 4e — Over-Engineering Detection (จาก code-quality-pragmatist)
+
+**แอพนี้เป็น POS MVP — complexity ต้องเหมาะสม**
+
+- [ ] ไม่มี abstraction layer ที่ใช้แค่ที่เดียว (wrapper function ที่แค่ forward args)
+- [ ] ไม่มี config/feature flag system สำหรับ feature ที่ยังไม่มีแผนจะ toggle
+- [ ] Error handling เหมาะสม — ไม่ over-catch, ไม่ under-catch
+- [ ] ไม่มี dependency ที่ import มาแต่ไม่ได้ใช้จริง
+
 ## สิ่งที่ QA ไม่ทำ
 - ไม่ตรวจว่าปุ่มสวยไหม สีถูกไหม — นั่นคือหน้าที่ uxui + customer
-- ไม่ตรวจ performance หรือ animation
+- ไม่ตรวจ deep performance profiling (Xcode Instruments, Android Profiler) — แค่ตรวจ code-level anti-patterns
 - ไม่แก้โค้ด — ถ้าพบ bug ให้ report CTO แล้ว CTO assign dev
 
 ## Sign-Off Criteria (ต้องครบก่อน approve ให้ customer ทดสอบ)
 ```
 [ ] npx jest → 0 failed
 [ ] coverage ≥ 70% branches, ≥ 80% functions/lines
+[ ] CRITICAL features (payments, auth, QR, orders) coverage ≥ 90%
 [ ] ทุก feature ใน checklist → PASS
 [ ] Multi-tenant isolation checklist → PASS ทุกข้อ
+[ ] Web production checklist → PASS ทุกข้อ
+[ ] Stub detection → ไม่มี TODO/FIXME/mock ค้างใน production flow
+[ ] Performance anti-patterns → ไม่มี critical issues
 [ ] Integration gaps → document แล้ว แจ้ง CTO แล้ว
 [ ] ไม่มี functional bug ค้างอยู่
 [ ] ทุก bug ที่พบในรอบนี้ → มี regression test แล้ว
@@ -211,6 +270,10 @@ PHASE: 2 (tests run)
 FILES: N/A
 DB: no | AUTH: no | VISUAL: no
 TESTS: X/Y pass | coverage: branches X%, functions X%
+CRITICAL_COVERAGE: X% (payments, auth, QR, orders)
+STUBS: clean | [n issues]
+PERF_ANTIPATTERNS: clean | [n issues]
+OVERENG: clean | [n issues]
 ISSUES: none | [n functional bugs, n isolation fails]
 INTEGRATION_GAPS: none | [list]
 SUMMARY: [1 บรรทัด — sign-off APPROVED / REJECTED]

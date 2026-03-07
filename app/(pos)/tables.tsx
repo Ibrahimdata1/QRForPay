@@ -471,9 +471,10 @@ export default function TablesScreen() {
                 <TextInput
                   style={styles.cashSheetInput}
                   value={cashModal.cashInput}
-                  onChangeText={(v) => setCashModal((prev) => prev ? { ...prev, cashInput: v } : prev)}
+                  onChangeText={(v) => setCashModal((prev) => prev ? { ...prev, cashInput: v.replace(/[^0-9.]/g, '') } : prev)}
                   keyboardType="numeric"
                   placeholder="0"
+                  maxLength={10}
                   autoFocus
                 />
                 {(() => {

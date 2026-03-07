@@ -37,6 +37,9 @@ export const useCartStore = create<CartState>()(
             (item) => item.product.id === product.id
           )
           if (existing) {
+            if (existing.quantity >= product.stock) {
+              return // stock limit reached
+            }
             existing.quantity += 1
             existing.subtotal = existing.quantity * existing.product.price
           } else {
@@ -68,13 +71,15 @@ export const useCartStore = create<CartState>()(
             (item) => item.product.id === productId
           )
           if (item) {
-            item.quantity = qty
-            item.subtotal = qty * item.product.price
+            const capped = Math.min(qty, item.product.stock)
+            item.quantity = capped
+            item.subtotal = capped * item.product.price
           }
         }),
 
       applyDiscount: (percent: number) =>
         set((state) => {
+          if (isNaN(percent)) return
           state.discount = Math.min(100, Math.max(0, percent))
         }),
 

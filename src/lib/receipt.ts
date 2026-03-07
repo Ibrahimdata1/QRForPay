@@ -32,7 +32,7 @@ export function formatReceipt(order: OrderWithItems): string {
   lines.push(divider)
 
   for (const item of order.items) {
-    const name = item.product_id.substring(0, 20).padEnd(20)
+    const name = (item.product_id ?? 'ไม่ทราบ').substring(0, 20).padEnd(20)
     const qty = `x${item.quantity}`
     const price = formatThaiCurrency(item.subtotal)
     lines.push(`${name} ${qty.padStart(4)} ${price.padStart(10)}`)

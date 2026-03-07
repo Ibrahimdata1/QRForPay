@@ -392,7 +392,12 @@ export default function OrdersScreen() {
           return Object.values(merged);
         })(),
       }))
-      .sort((a, b) => parseInt(a.tableNumber) - parseInt(b.tableNumber));
+      .sort((a, b) => {
+        const na = parseInt(a.tableNumber);
+        const nb = parseInt(b.tableNumber);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a.tableNumber.localeCompare(b.tableNumber);
+      });
   }, [orders]);
 
   const getKitchenAction = (order: OrderWithItems): { nextStatus: string; label: string; color: string } | null => {

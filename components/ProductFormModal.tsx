@@ -34,7 +34,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
     if (visible) {
       setName(product?.name ?? '');
       setPrice(product ? String(product.price) : '');
-      setStock(product ? String(product.stock) : '0');
+      setStock(product ? String(product.stock) : '1');
       setCategoryId(product?.category_id ?? null);
       setImageUrl(product?.image_url ?? '');
     }
@@ -81,17 +81,60 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
     }
   };
 
+  const handlePriceChange = (text: string) => {
+    // Allow only digits and one decimal point, max 2 decimal places
+    const cleaned = text.replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    if (parts.length > 2) return; // reject second decimal point
+    if (parts.length === 2 && parts[1].length > 2) return; // max 2 decimal places
+    setPrice(cleaned);
+  };
+
+  const handleStockChange = (text: string) => {
+    // Allow only digits — no letters, decimals, or negatives
+    setStock(text.replace(/[^0-9]/g, ''));
+  };
+
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('กรุณากรอกชื่อสินค้า'); return; }
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) { Alert.alert('กรุณากรอกราคาที่ถูกต้อง'); return; }
+    const trimmedName = name.trim();
+    if (!trimmedName) { Alert.alert('กรุณากรอกชื่อสินค้า'); return; }
+    if (trimmedName.length > 100) { Alert.alert('ชื่อสินค้ายาวเกินไป', 'กรุณาใช้ไม่เกิน 100 ตัวอักษร'); return; }
+
+    // Price: must be a clean number > 0
+    const priceTrimmed = price.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(priceTrimmed)) {
+      Alert.alert('ราคาไม่ถูกต้อง', 'กรุณากรอกตัวเลขเท่านั้น เช่น 50 หรือ 29.50');
+      return;
+    }
+    const priceNum = parseFloat(priceTrimmed);
+    if (priceNum <= 0 || priceNum > 99999) {
+      Alert.alert('ราคาไม่ถูกต้อง', 'กรุณากรอกราคาระหว่าง 1 - 99,999 บาท');
+      return;
+    }
+
+    // Stock: must be a whole number
+    const stockTrimmed = stock.trim();
+    if (!/^\d+$/.test(stockTrimmed)) {
+      Alert.alert('สต็อกไม่ถูกต้อง', 'กรุณากรอกจำนวนเต็มเท่านั้น');
+      return;
+    }
+    const stockNum = parseInt(stockTrimmed, 10);
+    if (!product && stockNum < 1) {
+      Alert.alert('สต็อกไม่ถูกต้อง', 'สินค้าใหม่ต้องมีสต็อกอย่างน้อย 1 ชิ้น');
+      return;
+    }
+    if (stockNum > 99999) {
+      Alert.alert('สต็อกไม่ถูกต้อง', 'จำนวนสต็อกต้องไม่เกิน 99,999');
+      return;
+    }
+
     setSaving(true);
     try {
       await onSave({
         ...(product?.id ? { id: product.id } : {}),
-        name: name.trim(),
+        name: trimmedName,
         price: priceNum,
-        stock: parseInt(stock) || 0,
+        stock: stockNum,
         category_id: categoryId ?? undefined,
         image_url: imageUrl || undefined,
       });
@@ -153,6 +196,7 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
               onChangeText={setName}
               placeholder="เช่น ข้าวผัดกระเพรา"
               placeholderTextColor="#9CA3AF"
+              maxLength={100}
             />
 
             {/* Price + Stock row */}
@@ -162,10 +206,11 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
                 <TextInput
                   style={styles.input}
                   value={price}
-                  onChangeText={setPrice}
+                  onChangeText={handlePriceChange}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                   placeholderTextColor="#9CA3AF"
+                  maxLength={8}
                 />
               </View>
               <View style={styles.halfField}>
@@ -173,10 +218,11 @@ export function ProductFormModal({ visible, product, categories, shopId, onSave,
                 <TextInput
                   style={styles.input}
                   value={stock}
-                  onChangeText={setStock}
+                  onChangeText={handleStockChange}
                   keyboardType="number-pad"
-                  placeholder="0"
+                  placeholder="1"
                   placeholderTextColor="#9CA3AF"
+                  maxLength={5}
                 />
               </View>
             </View>

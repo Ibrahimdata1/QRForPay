@@ -19,6 +19,7 @@ interface ProductState {
   deductStock: (productId: string, qty: number) => void
   saveProduct: (shopId: string, product: Partial<Product> & { name: string; price: number }) => Promise<void>
   deleteProduct: (productId: string) => Promise<void>
+  reorderProducts: (orderedIds: string[]) => Promise<void>
 }
 
 export const useProductStore = create<ProductState>()(
@@ -41,7 +42,7 @@ export const useProductStore = create<ProductState>()(
           .select('*')
           .eq('shop_id', shopId)
           .eq('is_active', true)
-          .order('name')
+          .order('sort_order')
 
         if (error) throw error
 
@@ -134,6 +135,22 @@ export const useProductStore = create<ProductState>()(
       const { error } = await supabase.from('products').update({ is_active: false, deleted_at: new Date().toISOString() }).eq('id', productId)
       if (error) throw error
       set((state) => { state.products = state.products.filter((p) => p.id !== productId) })
+    },
+
+    reorderProducts: async (orderedIds: string[]) => {
+      // Optimistic update
+      set((state) => {
+        const map = new Map(state.products.map(p => [p.id, p]))
+        state.products = orderedIds.map((id, i) => {
+          const p = map.get(id)!
+          ;(p as any).sort_order = i + 1
+          return p
+        }).filter(Boolean)
+      })
+      // Persist to DB
+      const updates = orderedIds.map((id, i) => ({ id, sort_order: i + 1 }))
+      const { error } = await supabase.rpc('update_product_sort_order', { p_updates: updates })
+      if (error && __DEV__) console.error('[reorderProducts]', error)
     },
   }))
 )
