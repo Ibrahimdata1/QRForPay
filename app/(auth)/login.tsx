@@ -210,7 +210,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 16,
+    paddingBottom: 48,
   },
   posIcon: {
     gap: 6,
@@ -248,6 +248,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
+    marginTop: -32,
     paddingHorizontal: 28,
     paddingTop: 32,
     paddingBottom: 32,
