@@ -18,6 +18,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -99,6 +102,7 @@ export default function TablesScreen() {
   const [isMoving, setIsMoving] = useState(false);
   const [cashModal, setCashModal] = useState<{ order: OrderWithItems; cashInput: string } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const qrViewRef = useRef<View>(null);
 
   // ── fetch active orders ────────────────────────────────────────────────────
   const fetchActive = useCallback(async () => {
@@ -182,12 +186,42 @@ export default function TablesScreen() {
 
   const customerUrl = selectedTable ? buildCustomerUrl(shopId, selectedTable) : '';
 
-  const handleShare = () => {
-    if (!selectedTable) return;
-    Share.share({
-      message: `สั่งอาหารโต๊ะ ${selectedTable} — ${shop?.name ?? ''}\n${customerUrl}`,
-      url: customerUrl,
-    }).catch(() => {});
+  const handleShareQR = async () => {
+    if (!selectedTable || !qrViewRef.current) return;
+    try {
+      const uri = await captureRef(qrViewRef, { format: 'png', quality: 1 });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: `QR โต๊ะ ${selectedTable} — ${shop?.name ?? ''}`,
+        });
+      } else {
+        // Fallback: share link
+        Share.share({
+          message: `สั่งอาหารโต๊ะ ${selectedTable} — ${shop?.name ?? ''}\n${customerUrl}`,
+          url: customerUrl,
+        });
+      }
+    } catch {
+      Alert.alert('แชร์ไม่ได้', 'กรุณาลองใหม่อีกครั้ง');
+    }
+  };
+
+  const handleSaveQR = async () => {
+    if (!selectedTable || !qrViewRef.current) return;
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('ไม่ได้รับอนุญาต', 'กรุณาอนุญาตให้แอพเข้าถึงคลังรูปภาพ');
+        return;
+      }
+      const uri = await captureRef(qrViewRef, { format: 'png', quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('บันทึกแล้ว', `QR โต๊ะ ${selectedTable} บันทึกลงในคลังรูปภาพแล้ว`);
+    } catch {
+      Alert.alert('บันทึกไม่ได้', 'กรุณาลองใหม่อีกครั้ง');
+    }
   };
 
   const handleManualPay = (order: OrderWithItems) => {
@@ -553,20 +587,31 @@ export default function TablesScreen() {
             {/* QR Code */}
             {selectedTable && shopId && (
               <View style={styles.qrCard}>
-                <Text style={styles.qrCardTitle}>QR สั่งอาหาร</Text>
-                <View style={styles.qrBox}>
-                  <QRCode
-                    value={customerUrl}
-                    size={180}
-                    backgroundColor="#FFFFFF"
-                    color="#111827"
-                  />
+                <Text style={styles.qrCardTitle}>QR สั่งอาหาร — โต๊ะ {selectedTable}</Text>
+                {/* ref ครอบเฉพาะส่วนที่จะ capture เป็นรูป */}
+                <View ref={qrViewRef} style={styles.qrCapture} collapsable={false}>
+                  <View style={styles.qrBox}>
+                    <QRCode
+                      value={customerUrl}
+                      size={180}
+                      backgroundColor="#FFFFFF"
+                      color="#111827"
+                    />
+                  </View>
+                  <Text style={styles.qrShopName}>{shop?.name ?? ''}</Text>
+                  <Text style={styles.qrTableLabel}>โต๊ะ {selectedTable}</Text>
                 </View>
                 <Text style={styles.qrInstruction}>ลูกค้าสแกนเพื่อสั่งอาหาร</Text>
-                <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-                  <Ionicons name="share-outline" size={16} color={colors.primary} />
-                  <Text style={styles.shareButtonText}>แชร์ลิงก์</Text>
-                </TouchableOpacity>
+                <View style={styles.qrActionRow}>
+                  <TouchableOpacity style={styles.shareButton} onPress={handleShareQR}>
+                    <Ionicons name="share-outline" size={16} color={colors.primary} />
+                    <Text style={styles.shareButtonText}>แชร์ QR</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveButton} onPress={handleSaveQR}>
+                    <Ionicons name="download-outline" size={16} color="#059669" />
+                    <Text style={styles.saveButtonText}>บันทึกรูป</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
@@ -814,12 +859,36 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: 10,
   },
+  qrCapture: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  qrShopName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 10,
+  },
+  qrTableLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  qrActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
   shareButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: colors.primary,
@@ -828,6 +897,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+  },
+  saveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#059669',
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
   },
 
   // Orders section
