@@ -373,10 +373,23 @@ export default function SettingsScreen() {
                     <Text style={styles.teamMemberEmail} numberOfLines={1}>
                       {u.email}
                     </Text>
+                    {u.pending_shop_name ? (
+                      <Text style={styles.teamMemberEmail} numberOfLines={1}>
+                        ร้าน: {u.pending_shop_name}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.teamMemberEmail, { color: colors.text.light, fontStyle: 'italic' }]} numberOfLines={1}>
+                        ยังไม่ได้กรอกข้อมูลร้าน
+                      </Text>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={styles.approvePill}
-                    onPress={() => { setApprovingUser(u); setNewShopName(''); setNewPromptpay(''); }}
+                    onPress={() => {
+                      setApprovingUser(u);
+                      setNewShopName(u.pending_shop_name ?? '');
+                      setNewPromptpay(u.pending_promptpay ?? '');
+                    }}
                     activeOpacity={0.8}
                   >
                     <Ionicons name="checkmark-circle" size={16} color={colors.text.inverse} />
@@ -392,6 +405,11 @@ export default function SettingsScreen() {
                 <Text style={styles.approveFormTitle}>
                   อนุมัติ: {approvingUser.full_name || approvingUser.email}
                 </Text>
+                {approvingUser.pending_shop_name ? (
+                  <Text style={[styles.fieldHint, { marginBottom: 8 }]}>
+                    ข้อมูลจากเจ้าของร้าน (แก้ไขได้)
+                  </Text>
+                ) : null}
                 <TextInput
                   style={styles.input}
                   value={newShopName}

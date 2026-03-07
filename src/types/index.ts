@@ -18,6 +18,8 @@ export interface Profile {
   shop_id: string | null      // null until approved
   avatar_url?: string
   push_token?: string | null
+  pending_shop_name?: string | null  // filled by owner before super_admin approves
+  pending_promptpay?: string | null
   created_at: string
 }
 

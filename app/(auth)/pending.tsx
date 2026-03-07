@@ -17,6 +17,7 @@ export default function PendingScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
   const initialize = useAuthStore((s) => s.initialize);
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -39,7 +40,7 @@ export default function PendingScreen() {
 
         <Text style={styles.title}>รอการอนุมัติ</Text>
         <Text style={styles.subtitle}>
-          บัญชีของคุณอยู่ระหว่างรอการอนุมัติจากเจ้าของร้าน
+          ส่งข้อมูลร้านแล้ว รอ admin อนุมัติบัญชีของคุณ
         </Text>
 
         {/* User email */}
@@ -52,9 +53,27 @@ export default function PendingScreen() {
           </View>
         ) : null}
 
+        {/* Submitted shop info */}
+        {profile?.pending_shop_name ? (
+          <View style={styles.shopInfoBox}>
+            <View style={styles.shopInfoRow}>
+              <Ionicons name="storefront-outline" size={15} color={colors.text.secondary} />
+              <Text style={styles.shopInfoLabel}>ชื่อร้าน</Text>
+              <Text style={styles.shopInfoValue}>{profile.pending_shop_name}</Text>
+            </View>
+            {profile.pending_promptpay ? (
+              <View style={styles.shopInfoRow}>
+                <Ionicons name="qr-code-outline" size={15} color={colors.text.secondary} />
+                <Text style={styles.shopInfoLabel}>PromptPay</Text>
+                <Text style={styles.shopInfoValue}>{profile.pending_promptpay}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         <Text style={styles.hint}>
-          กรุณาแจ้งเจ้าของร้านให้อนุมัติบัญชีของคุณใน{'\n'}
-          หน้า ตั้งค่า → จัดการทีม
+          admin จะอนุมัติบัญชีของคุณเร็ว ๆ นี้{'\n'}
+          กด "ตรวจสอบสถานะ" เมื่อได้รับแจ้ง
         </Text>
 
         {/* Refresh button */}
@@ -150,6 +169,30 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     flexShrink: 1,
+  },
+  shopInfoBox: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: 14,
+    gap: 10,
+    marginBottom: 20,
+  },
+  shopInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shopInfoLabel: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    width: 70,
+  },
+  shopInfoValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.primary,
   },
   hint: {
     fontSize: 13,

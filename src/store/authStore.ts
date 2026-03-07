@@ -25,6 +25,8 @@ export interface PendingUser {
   full_name?: string
   avatar_url?: string
   created_at: string
+  pending_shop_name?: string | null
+  pending_promptpay?: string | null
 }
 
 interface AuthState {
@@ -45,6 +47,8 @@ interface AuthState {
   fetchTeam: () => Promise<void>
   createCashier: (fullName: string, email: string, password: string) => Promise<void>
   removeTeamMember: (profileId: string) => Promise<void>
+  // Pending owner: self-registration step
+  submitOwnerInfo: (shopName: string, promptpayId: string) => Promise<void>
   // Super admin actions
   fetchPendingUsers: () => Promise<void>
   approveOwner: (userId: string, shopName: string, promptpayId: string) => Promise<void>
@@ -323,6 +327,22 @@ export const useAuthStore = create<AuthState>()(
 
       // Refresh team list
       await get().fetchTeam()
+    },
+
+    submitOwnerInfo: async (shopName: string, promptpayId: string) => {
+      const { error } = await supabase.rpc('submit_owner_info', {
+        p_shop_name: shopName.trim(),
+        p_promptpay: promptpayId.trim(),
+      })
+      if (error) throw error
+
+      // Update local profile so routing redirects to pending
+      set((state) => {
+        if (state.profile) {
+          state.profile.pending_shop_name = shopName.trim()
+          state.profile.pending_promptpay = promptpayId.trim()
+        }
+      })
     },
 
     fetchPendingUsers: async () => {

@@ -52,7 +52,12 @@ function AppShell() {
     if (!user) {
       redirectTarget = '/(auth)/login';
     } else if (profile === null || profile.role === null) {
-      redirectTarget = '/(auth)/pending';
+      // If owner hasn't filled in shop info yet → registration form first
+      if (profile?.pending_shop_name) {
+        redirectTarget = '/(auth)/pending';
+      } else {
+        redirectTarget = '/(auth)/register-shop';
+      }
     } else if (profile.role === 'super_admin') {
       redirectTarget = '/(pos)/settings';
     } else {
@@ -81,6 +86,7 @@ function AppShell() {
         }}
       >
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/register-shop" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/pending" options={{ headerShown: false }} />
         <Stack.Screen name="(pos)" options={{ headerShown: false }} />
         {/* Customer self-ordering — no auth required, opened via table QR code */}
