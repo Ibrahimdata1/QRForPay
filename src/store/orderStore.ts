@@ -301,9 +301,15 @@ export const useOrderStore = create<OrderState>()(
     },
 
     completeOrder: async (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => {
-      // Guard: skip if already completed
-      const order = get().orders.find((o) => o.id === orderId)
-      if (order?.status === 'completed') return
+      // Guard: skip if already completed.
+      // - Check orders list first (populated by fetchOrders from orders screen).
+      // - Also check currentOrder but only when orders list is non-empty to avoid
+      //   blocking on optimistic status that subscribeToOrder may have set before
+      //   the actual DB write completes.
+      const inList = get().orders.find((o) => o.id === orderId)
+      if (inList?.status === 'completed') return
+      const { orders, currentOrder } = get()
+      if (orders.length > 0 && currentOrder?.id === orderId && currentOrder.status === 'completed') return
 
       const { error: paymentError } = await supabase
         .from('payments')

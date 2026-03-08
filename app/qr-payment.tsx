@@ -70,6 +70,8 @@ export default function QRPaymentScreen() {
         // Best effort
       }
     }
+    // Navigate back so cashier isn't stuck on expired QR screen
+    router.back();
   };
 
   if (!orderId || (!currentOrder && !loadTimedOut)) {

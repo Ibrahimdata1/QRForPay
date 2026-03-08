@@ -50,7 +50,14 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-web-browser",
-      "expo-media-library"
+      "expo-media-library",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0066CC"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

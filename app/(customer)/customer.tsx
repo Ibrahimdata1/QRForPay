@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabaseCustomer } from '../../src/lib/supabase-customer';
+import { supabaseCustomer, createSessionedCustomerClient } from '../../src/lib/supabase-customer';
 import { generatePromptPayPayload, generateQRReference } from '../../src/lib/qr';
 import { Colors } from '../../constants/colors';
 import QRCode from 'react-native-qrcode-svg';
@@ -36,6 +36,7 @@ interface MenuItem {
   image_url?: string | null;
   category_id: string | null;
   is_active: boolean;
+  stock?: number | null;
 }
 
 interface MenuCategory {
@@ -169,6 +170,13 @@ export default function CustomerOrderScreen() {
       : Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
 
+  // Supabase client scoped to this session — sends x-customer-session header
+  // so the RLS policy get_customer_session_id() can isolate rows by session.
+  // Used for orders / order_items / payments reads & realtime subscriptions.
+  const supabaseSessionRef = useRef(
+    createSessionedCustomerClient(customerSessionRef.current)
+  );
+
   // realtime unsubscribe refs
   const orderChannelRef = useRef<any>(null);
   const paymentChannelRef = useRef<any>(null);
@@ -251,7 +259,7 @@ export default function CustomerOrderScreen() {
       // Fetch active products
       const { data: products } = await supabaseCustomer
         .from('products')
-        .select('id, name, price, image_url, category_id, is_active')
+        .select('id, name, price, image_url, category_id, is_active, stock')
         .eq('shop_id', shopId)
         .eq('is_active', true)
         .order('name', { ascending: true });
@@ -332,7 +340,7 @@ export default function CustomerOrderScreen() {
   );
 
   const addToCart = (item: MenuItem) => {
-    if ((item as any).stock === 0) {
+    if (item.stock === 0) {
       webAlert('สินค้าหมด', `"${item.name}" หมดแล้ว ไม่สามารถเพิ่มในตะกร้าได้`);
       return;
     }
@@ -390,7 +398,7 @@ export default function CustomerOrderScreen() {
       const totalAmount = subtotal;
 
       // 1. Insert order
-      const { data: orderRow, error: orderErr } = await supabaseCustomer
+      const { data: orderRow, error: orderErr } = await supabaseSessionRef.current
         .from('orders')
         .insert({
           shop_id: shopId,
@@ -422,14 +430,14 @@ export default function CustomerOrderScreen() {
         subtotal: e.item.price * e.qty,
       }));
 
-      const { error: itemsErr } = await supabaseCustomer
+      const { error: itemsErr } = await supabaseSessionRef.current
         .from('order_items')
         .insert(orderItems);
 
       if (itemsErr) throw itemsErr;
 
       // 3. Insert payment record (cashier will complete payment via POS)
-      const { error: payErr } = await supabaseCustomer
+      const { error: payErr } = await supabaseSessionRef.current
         .from('payments')
         .insert({
           order_id: orderRow.id,
@@ -507,7 +515,7 @@ export default function CustomerOrderScreen() {
     if (!orderId) return;
 
     // Payment status subscription
-    const payChannel = supabaseCustomer
+    const payChannel = supabaseSessionRef.current
       .channel(`customer-payment:${orderId}`)
       .on(
         'postgres_changes',
@@ -529,7 +537,7 @@ export default function CustomerOrderScreen() {
       .subscribe();
 
     // Order changes subscription — item cancellation + full cancel by shop
-    const orderChannel = supabaseCustomer
+    const orderChannel = supabaseSessionRef.current
       .channel(`customer-order:${orderId}`)
       .on(
         'postgres_changes',

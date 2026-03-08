@@ -210,19 +210,19 @@ export default function CartScreen() {
 
     const currentTotal = effectiveTotal;
 
-    if (paymentMethod === 'cash' && (cashReceivedNum <= 0 || isNaN(cashReceivedNum))) {
-      Alert.alert('กรุณากรอกจำนวนเงินที่ถูกต้อง');
+    // Guard 1: cash amount must be a positive number
+    if (isNaN(cashReceivedNum) || cashReceivedNum <= 0) {
+      Alert.alert('กรุณากรอกจำนวนเงินที่ถูกต้อง', 'ระบุจำนวนเงินที่รับมาจากลูกค้า');
       return;
     }
 
-    if (cashReceivedNum > 0 && cashReceivedNum < currentTotal) {
-      Alert.alert('จำนวนเงินไม่เพียงพอ', `ยอดที่ต้องชำระ ฿${currentTotal.toFixed(0)}`);
+    // Guard 2: must be enough to cover the total (strict — cannot confirm underpayment)
+    if (cashReceivedNum < currentTotal) {
+      Alert.alert('จำนวนเงินไม่เพียงพอ', `ยอดที่ต้องชำระ ฿${currentTotal.toFixed(0)}\nรับมา ฿${cashReceivedNum.toFixed(0)}\nขาด ฿${(currentTotal - cashReceivedNum).toFixed(0)}`);
       return;
     }
 
-    const confirmMsg = cashReceivedNum >= currentTotal
-      ? `ยอดรวม ฿${currentTotal.toFixed(0)}\nรับเงิน ฿${cashReceivedNum.toFixed(0)}\nทอน ฿${(cashReceivedNum - currentTotal).toFixed(0)}`
-      : `ยอดรวม ฿${currentTotal.toFixed(0)}\nชำระด้วยเงินสด`;
+    const confirmMsg = `ยอดรวม ฿${currentTotal.toFixed(0)}\nรับเงิน ฿${cashReceivedNum.toFixed(0)}\nทอน ฿${(cashReceivedNum - currentTotal).toFixed(0)}`;
 
     Alert.alert('ยืนยันรับเงินสด', confirmMsg, [
       { text: 'ยกเลิก', style: 'cancel' },
