@@ -745,8 +745,8 @@ export default function OrdersScreen() {
                   </View>
                 ))}
 
-                {/* Order rows with item details */}
-                {bill.orders.map((order) => {
+                {/* Order rows with item details — skip when single order (already shown in merged list above) */}
+                {bill.orders.length > 1 && bill.orders.map((order) => {
                   const orderStatusColor = statusColors[order.status] ?? '#9CA3AF';
                   const activeItems = (order.items ?? []).filter((i: any) => (i.item_status ?? 'active') === 'active');
                   return (

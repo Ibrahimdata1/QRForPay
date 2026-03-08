@@ -46,7 +46,7 @@ export default function ProductsScreen() {
   const canReorder = isOwner && !search.trim();
 
   // ── Drag-to-reorder state (PanResponder, pure JS) ──────────────────────────
-  const ITEM_HEIGHT = 74;
+  const ITEM_HEIGHT = 110;
   const [dragOrder, setDragOrder] = useState<Product[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const dragAnim = useRef(new Animated.Value(0)).current;
@@ -150,79 +150,87 @@ export default function ProductsScreen() {
   const renderProductContent = useCallback(({ item }: { item: Product }) => {
     const stockColor = getStockColor(item.stock);
     const pan = canReorder ? getOrCreatePan(item.id) : null;
+    const catName = item.category_id ? (categoryMap[item.category_id] || null) : null;
     return (
-      <View style={[styles.productRow, dragId === item.id && styles.productRowDragging]}>
-        {/* Drag handle — owner only, no search */}
-        {canReorder && (
-          <View style={styles.dragHandle} {...pan?.panHandlers}>
-            <Ionicons name="reorder-three" size={22} color={colors.text.light} />
-          </View>
-        )}
-
-        {/* Left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: stockColor }]} />
-
-        {/* Thumbnail */}
-        <View style={styles.thumbnail}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.thumbnailImg} resizeMode="cover" />
-          ) : (
-            <View style={styles.thumbnailFallback}>
-              <Ionicons name="cube-outline" size={20} color={colors.primary} />
+      <View style={[styles.productCard, dragId === item.id && styles.productRowDragging]}>
+        {/* Top row: drag handle + thumbnail + name/category + price */}
+        <View style={styles.cardTopRow}>
+          {/* Drag handle — owner only, no search */}
+          {canReorder && (
+            <View style={styles.dragHandle} {...pan?.panHandlers}>
+              <Ionicons name="reorder-three" size={22} color={colors.text.light} />
             </View>
           )}
-        </View>
 
-        {/* Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-          {item.category_id ? (
-            <Text style={styles.productCategory}>
-              {categoryMap[item.category_id] || '—'}
-            </Text>
-          ) : null}
-        </View>
+          {/* Thumbnail */}
+          <View style={styles.thumbnail}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.thumbnailImg} resizeMode="cover" />
+            ) : (
+              <View style={styles.thumbnailFallback}>
+                <Ionicons name="cube-outline" size={22} color={colors.primary} />
+              </View>
+            )}
+          </View>
 
-        {/* Price */}
-        <Text style={styles.productPrice}>฿{(item.price ?? 0).toFixed(0)}</Text>
+          {/* Name + category */}
+          <View style={styles.nameBlock}>
+            <Text style={styles.productName}>{item.name}</Text>
+            {catName && (
+              <Text style={styles.productCategory}>{catName}</Text>
+            )}
+          </View>
 
-        {/* Stock badge */}
-        <View style={[styles.stockBadge, { backgroundColor: stockColor + '18', borderColor: stockColor + '40' }]}>
-          <Text style={[styles.stockText, { color: stockColor }]}>
-            {item.stock === 0 ? 'หมด' : item.stock}
+          {/* Price — pinned right */}
+          <Text style={styles.productPrice}>
+            ฿{(item.price ?? 0).toLocaleString('th-TH')}
           </Text>
         </View>
 
-        {/* Edit */}
-        <TouchableOpacity
-          style={styles.editBtn}
-          onPress={() => { setEditingProduct(item); setFormVisible(true); }}
-        >
-          <Ionicons name="pencil-outline" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        {/* Bottom row: stock badge left, action buttons right */}
+        <View style={styles.cardBottomRow}>
+          <View style={[styles.stockBadge, { backgroundColor: stockColor + '14' }]}>
+            <View style={[styles.stockDot, { backgroundColor: stockColor }]} />
+            <Text style={[styles.stockText, { color: stockColor }]}>
+              {item.stock === 0 ? 'สินค้าหมด' : `คงเหลือ ${item.stock}`}
+            </Text>
+          </View>
 
-        {/* Delete — owner only */}
-        {isOwner && (
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => {
-              Alert.alert(
-                'ลบสินค้า',
-                `ต้องการลบ "${item.name}" ออกจากระบบ?`,
-                [
-                  { text: 'ยกเลิก', style: 'cancel' },
-                  {
-                    text: 'ลบ',
-                    style: 'destructive',
-                    onPress: () => deleteProduct(item.id),
-                  },
-                ]
-              );
-            }}
-          >
-            <Ionicons name="trash-outline" size={16} color="#EF4444" />
-          </TouchableOpacity>
-        )}
+          {/* Spacer */}
+          <View style={{ flex: 1 }} />
+
+          {/* Action buttons */}
+          <View style={styles.actionBtns}>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => { setEditingProduct(item); setFormVisible(true); }}
+            >
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <Text style={styles.editBtnText}>แก้ไข</Text>
+            </TouchableOpacity>
+            {isOwner && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => {
+                  Alert.alert(
+                    'ลบสินค้า',
+                    `ต้องการลบ "${item.name}" ออกจากระบบ?`,
+                    [
+                      { text: 'ยกเลิก', style: 'cancel' },
+                      {
+                        text: 'ลบ',
+                        style: 'destructive',
+                        onPress: () => deleteProduct(item.id),
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
     );
   }, [isOwner, canReorder, categoryMap, colors, dragId, getOrCreatePan]);
@@ -377,22 +385,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 100,
   },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  productCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    padding: 14,
-    marginBottom: 8,
+    padding: 12,
+    marginBottom: 10,
     ...shadow.sm,
   },
-  productInfo: {
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nameBlock: {
     flex: 1,
+    marginRight: 12,
   },
   productName: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text.primary,
+    lineHeight: 21,
   },
   productCategory: {
     fontSize: 12,
@@ -400,36 +412,41 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   productPrice: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.primary,
-    marginRight: 12,
     fontVariant: ['tabular-nums'] as any,
     letterSpacing: -0.3,
   },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderLight,
+  },
+  actionBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   stockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.full,
-    minWidth: 44,
-    alignItems: 'center',
+    gap: 6,
   },
-  stockBadgeOut: {
-    backgroundColor: colors.danger + '20',
-  },
-  stockBadgeLow: {
-    backgroundColor: colors.warning + '20',
+  stockDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   stockText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.secondary,
-  },
-  stockTextOut: {
-    color: colors.danger,
-  },
-  stockTextLow: {
-    color: colors.warning,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -441,16 +458,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text.light,
     marginTop: 12,
   },
-  accentBar: {
-    width: 4,
-    alignSelf: 'stretch',
-    borderRadius: 2,
-    marginRight: 12,
-  },
   thumbnail: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -484,12 +495,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     elevation: 999,
   },
   editBtn: {
-    padding: 8,
-    marginLeft: 8,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryLight,
+  },
+  editBtnText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.primary,
   },
   deleteBtn: {
     padding: 8,
-    marginLeft: 4,
+    borderRadius: radius.sm,
   },
   fabWrapper: {
     position: 'absolute',

@@ -91,7 +91,7 @@ export function ProductCard({ product, onPress, width }: ProductCardProps) {
 
           {/* Info */}
           <View style={styles.info}>
-            <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
+            <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
             <View style={styles.priceRow}>
               <Text style={styles.price}>฿{product.price.toFixed(0)}</Text>
               {!isOutOfStock && (
