@@ -301,15 +301,14 @@ export const useOrderStore = create<OrderState>()(
     },
 
     completeOrder: async (orderId: string, paymentData: Partial<Payment>, confirmationType: 'manual' | 'auto', confirmedBy?: string) => {
-      // Guard: skip if already completed.
-      // - Check orders list first (populated by fetchOrders from orders screen).
-      // - Also check currentOrder but only when orders list is non-empty to avoid
-      //   blocking on optimistic status that subscribeToOrder may have set before
-      //   the actual DB write completes.
+      // Guard: skip if the order is already marked completed in the orders list.
+      // We intentionally do NOT check currentOrder here because subscribeToOrder
+      // sets currentOrder.status = 'completed' optimistically before completeOrder
+      // runs — checking currentOrder would cause completeOrder to bail out before
+      // writing to the DB. The inList check covers the case where fetchOrders has
+      // already returned a completed order from the DB.
       const inList = get().orders.find((o) => o.id === orderId)
       if (inList?.status === 'completed') return
-      const { orders, currentOrder } = get()
-      if (orders.length > 0 && currentOrder?.id === orderId && currentOrder.status === 'completed') return
 
       const { error: paymentError } = await supabase
         .from('payments')

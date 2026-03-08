@@ -62,15 +62,24 @@ export default function QRPaymentScreen() {
     router.back();
   };
 
-  const handleExpired = async () => {
+  // B-4: onExpired no longer auto-cancels. It just marks the QR as expired.
+  // Cancel only happens when user explicitly presses the cancel button.
+  const handleExpired = () => {
+    // Do nothing here — modal already shows expired state.
+    // User must press "ยกเลิก" to cancel the order.
+  };
+
+  // B-1: When load timed out (order created in DB but screen couldn't load it),
+  // cancel the order and clear cart before going back to prevent duplicate orders.
+  const handleTimeoutBack = async () => {
     if (orderId) {
       try {
-        await useOrderStore.getState().cancelOrder(orderId, profile?.id ?? '');
+        await useOrderStore.getState().cancelOrder(orderId, profile?.id ?? '', 'timeout');
       } catch {
         // Best effort
       }
     }
-    // Navigate back so cashier isn't stuck on expired QR screen
+    clearCart();
     router.back();
   };
 
@@ -87,7 +96,7 @@ export default function QRPaymentScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <Text style={styles.loadingText}>ไม่พบออเดอร์ กรุณาลองใหม่</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+        <TouchableOpacity onPress={handleTimeoutBack} style={{ marginTop: 16 }}>
           <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>กลับ</Text>
         </TouchableOpacity>
       </View>

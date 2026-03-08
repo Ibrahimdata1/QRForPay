@@ -16,6 +16,7 @@ interface QRPaymentModalProps {
   onConfirmed?: () => void;
   onCancel?: () => void;
   onExpired?: () => void;
+  onRetry?: () => void;
   onManualConfirm?: () => void;
   cashierName?: string;
 }
@@ -31,6 +32,7 @@ export function QRPaymentModal({
   onConfirmed,
   onCancel,
   onExpired,
+  onRetry,
   onManualConfirm,
   cashierName,
 }: QRPaymentModalProps) {
@@ -54,8 +56,11 @@ export function QRPaymentModal({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
+          // B-4: Only set local state to expired. Do NOT call onExpired() here —
+          // that would auto-cancel the order without user consent.
+          // onExpired is now called only when user explicitly presses "ยกเลิก"
+          // in the expired state (handled in the button onPress below).
           setStatus('expired');
-          onExpired?.();
           return 0;
         }
         return prev - 1;
@@ -63,7 +68,7 @@ export function QRPaymentModal({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [status, onExpired]);
+  }, [status]);
 
   useEffect(() => {
     if (status !== 'waiting') return;
@@ -163,25 +168,50 @@ export function QRPaymentModal({
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity
-        style={[
-          styles.actionButton,
-          status === 'confirmed' && styles.actionButtonSuccess,
-          status === 'expired' && styles.actionButtonDanger,
-        ]}
-        onPress={() => {
-          if (status === 'confirmed') {
-            onConfirmed?.();
-          } else {
-            onCancel?.();
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.actionButtonText, status !== 'waiting' && styles.actionButtonTextLight]}>
-          {status === 'confirmed' ? 'เสร็จสิ้น' : 'ยกเลิก'}
-        </Text>
-      </TouchableOpacity>
+      {/* B-4: expired state — show retry + cancel buttons separately */}
+      {status === 'expired' ? (
+        <View style={styles.expiredActions}>
+          {onRetry && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonRetry]}
+              onPress={onRetry}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="refresh-outline" size={18} color={Colors.surface} />
+              <Text style={[styles.actionButtonText, styles.actionButtonTextLight]}>สร้าง QR ใหม่</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonDanger, onRetry ? styles.actionButtonNarrow : null]}
+            onPress={() => {
+              onExpired?.();
+              onCancel?.();
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.actionButtonText, styles.actionButtonTextLight]}>ยกเลิก</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            status === 'confirmed' && styles.actionButtonSuccess,
+          ]}
+          onPress={() => {
+            if (status === 'confirmed') {
+              onConfirmed?.();
+            } else {
+              onCancel?.();
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.actionButtonText, status !== 'waiting' && styles.actionButtonTextLight]}>
+            {status === 'confirmed' ? 'เสร็จสิ้น' : 'ยกเลิก'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <Modal visible={showConfirmModal} transparent animationType="fade">
         <View style={styles.confirmOverlay}>
@@ -367,6 +397,21 @@ const styles = StyleSheet.create({
   },
   actionButtonDanger: {
     backgroundColor: Colors.danger,
+  },
+  actionButtonRetry: {
+    backgroundColor: Colors.primary,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionButtonNarrow: {
+    flex: 0,
+    paddingHorizontal: 24,
+  },
+  expiredActions: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
   },
   actionButtonText: {
     fontSize: 16,

@@ -491,11 +491,17 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Fetch error banner */}
+      {/* B-5: Fetch error banner with retry button */}
       {fetchError ? (
         <View style={styles.errorBanner}>
           <Ionicons name="wifi-outline" size={16} color="#B45309" />
           <Text style={styles.errorBannerText}>{fetchError}</Text>
+          <TouchableOpacity
+            onPress={() => { if (shop?.id) fetchOrders(shop.id); }}
+            style={styles.errorBannerRetry}
+          >
+            <Text style={styles.errorBannerRetryText}>ลองใหม่</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -1681,6 +1687,17 @@ const makeStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontSize: 13,
     color: '#B45309',
     flex: 1,
+  },
+  errorBannerRetry: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#B45309',
+  },
+  errorBannerRetryText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   // Payment modal
   payOverlay: {

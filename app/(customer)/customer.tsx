@@ -570,7 +570,10 @@ export default function CustomerOrderScreen() {
           // ── Total changed (item cancelled by shop) → refresh ALL table items ──
           if (newTotal !== undefined && newTotal !== null) {
             try {
-              const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+              // B-2: use sessioned client so RLS row-level policies see the correct session.
+              // Fall back to anon client if session hasn't been initialized yet.
+              const client = supabaseSessionRef.current ?? supabaseCustomer;
+              const { data: rows } = await client.rpc('get_table_combined_view', {
                 p_shop_id: shopId,
                 p_table_number: tableNumber,
               });
@@ -627,10 +630,13 @@ export default function CustomerOrderScreen() {
   }, [orderId]);
 
   // ── realtime: listen to ALL orders for this table (cancel/status changes) ──
-  const refreshTableRef = useRef<() => Promise<void>>();
+  const refreshTableRef = useRef<(() => Promise<void>) | undefined>(undefined);
   refreshTableRef.current = async () => {
     try {
-      const { data: rows } = await supabaseCustomer.rpc('get_table_combined_view', {
+      // B-2: use sessioned client so RLS row-level policies see the correct session.
+      // Fall back to anon client if session hasn't been initialized yet.
+      const client = supabaseSessionRef.current ?? supabaseCustomer;
+      const { data: rows } = await client.rpc('get_table_combined_view', {
         p_shop_id: shopId,
         p_table_number: tableNumber,
       });
