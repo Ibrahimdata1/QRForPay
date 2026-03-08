@@ -46,23 +46,26 @@ export default function ProductsScreen() {
   const canReorder = isOwner && !search.trim();
 
   // ── Drag-to-reorder state (PanResponder, pure JS) ──────────────────────────
-  const ITEM_HEIGHT = 74; // productRow: padding 14×2 + thumbnail 44 = 72 + 2px border ≈ 74
+  const ITEM_HEIGHT = 74;
   const [dragOrder, setDragOrder] = useState<Product[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const dragAnim = useRef(new Animated.Value(0)).current;
   const dragStateRef = useRef({ fromIdx: 0, currentIdx: 0 });
   const dragOrderRef = useRef<Product[]>([]);
+  const productsRef = useRef<Product[]>([]); // always current, used inside PanResponder
+  productsRef.current = products;
   const canReorderRef = useRef(false);
   canReorderRef.current = canReorder;
-  const ghostTopRef = useRef(0); // ghost Y relative to list container
-  const listTopRef = useRef(0);  // list container Y on screen
-  const scrollYRef = useRef(0);  // current scroll offset
+  const ghostTopRef = useRef(0);
+  const listTopRef = useRef(0);
+  const scrollYRef = useRef(0);
 
   // Sync dragOrder with products when not dragging
   useEffect(() => {
     if (!dragId) {
-      setDragOrder([...products]);
-      dragOrderRef.current = [...products];
+      const copy = products.filter(Boolean); // guard against undefined elements
+      dragOrderRef.current = copy;
+      setDragOrder(copy);
     }
   }, [products, dragId]);
 
@@ -85,16 +88,16 @@ export default function ProductsScreen() {
       },
       onPanResponderMove: (_, { dy }) => {
         dragAnim.setValue(dy);
-        const order = dragOrderRef.current;
         const { fromIdx } = dragStateRef.current;
-        const newIdx = Math.max(0, Math.min(order.length - 1,
+        const cur = productsRef.current; // always latest, no stale closure
+        const newIdx = Math.max(0, Math.min(cur.length - 1,
           Math.round(fromIdx + dy / (ITEM_HEIGHT + 8))
         ));
         if (newIdx !== dragStateRef.current.currentIdx) {
           dragStateRef.current.currentIdx = newIdx;
-          const base = [...products]; // always rebase from original products
-          const [item] = base.splice(fromIdx, 1);
-          base.splice(newIdx, 0, item);
+          const base = [...cur];
+          const [moved] = base.splice(fromIdx, 1);
+          if (moved) base.splice(newIdx, 0, moved);
           dragOrderRef.current = base;
           setDragOrder([...base]);
         }
@@ -108,8 +111,9 @@ export default function ProductsScreen() {
       onPanResponderTerminate: () => {
         setDragId(null);
         dragAnim.setValue(0);
-        dragOrderRef.current = [...products];
-        setDragOrder([...products]);
+        const reset = [...productsRef.current];
+        dragOrderRef.current = reset;
+        setDragOrder(reset);
       },
     });
     panMap.current.set(itemId, pan);
