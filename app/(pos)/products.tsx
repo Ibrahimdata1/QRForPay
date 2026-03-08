@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TextInput,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
   Image,
   Alert,
+  PanResponder,
+  Animated,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { shadow, radius } from '../../constants/theme';
@@ -41,15 +45,76 @@ export default function ProductsScreen() {
 
   const canReorder = isOwner && !search.trim();
 
-  const handleMove = useCallback((itemId: string, direction: 'up' | 'down') => {
-    const idx = products.findIndex((p) => p.id === itemId);
-    if (idx < 0) return;
-    const newList = [...products];
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= newList.length) return;
-    [newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]];
-    reorderProducts(newList.map((p) => p.id));
-  }, [products, reorderProducts]);
+  // ── Drag-to-reorder state (PanResponder, pure JS) ──────────────────────────
+  const ITEM_HEIGHT = 74; // productRow: padding 14×2 + thumbnail 44 = 72 + 2px border ≈ 74
+  const [dragOrder, setDragOrder] = useState<Product[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const dragAnim = useRef(new Animated.Value(0)).current;
+  const dragStateRef = useRef({ fromIdx: 0, currentIdx: 0 });
+  const dragOrderRef = useRef<Product[]>([]);
+  const canReorderRef = useRef(false);
+  canReorderRef.current = canReorder;
+  const ghostTopRef = useRef(0); // ghost Y relative to list container
+  const listTopRef = useRef(0);  // list container Y on screen
+  const scrollYRef = useRef(0);  // current scroll offset
+
+  // Sync dragOrder with products when not dragging
+  useEffect(() => {
+    if (!dragId) {
+      setDragOrder([...products]);
+      dragOrderRef.current = [...products];
+    }
+  }, [products, dragId]);
+
+  // PanResponder instances per item id (stable Map, use refs for state)
+  const panMap = useRef<Map<string, ReturnType<typeof PanResponder.create>>>(new Map());
+
+  const getOrCreatePan = useCallback((itemId: string) => {
+    if (panMap.current.has(itemId)) return panMap.current.get(itemId)!;
+    const pan = PanResponder.create({
+      onStartShouldSetPanResponder: () => canReorderRef.current,
+      onMoveShouldSetPanResponder: (_, gs) => canReorderRef.current && Math.abs(gs.dy) > 4,
+      onPanResponderGrant: (evt) => {
+        const order = dragOrderRef.current;
+        const fromIdx = order.findIndex((p) => p.id === itemId);
+        dragStateRef.current = { fromIdx, currentIdx: fromIdx };
+        // Ghost starts at item's position in list (accounting for scroll)
+        ghostTopRef.current = fromIdx * (ITEM_HEIGHT + 8) - scrollYRef.current;
+        dragAnim.setValue(0);
+        setDragId(itemId);
+      },
+      onPanResponderMove: (_, { dy }) => {
+        dragAnim.setValue(dy);
+        const order = dragOrderRef.current;
+        const { fromIdx } = dragStateRef.current;
+        const newIdx = Math.max(0, Math.min(order.length - 1,
+          Math.round(fromIdx + dy / (ITEM_HEIGHT + 8))
+        ));
+        if (newIdx !== dragStateRef.current.currentIdx) {
+          dragStateRef.current.currentIdx = newIdx;
+          const base = [...products]; // always rebase from original products
+          const [item] = base.splice(fromIdx, 1);
+          base.splice(newIdx, 0, item);
+          dragOrderRef.current = base;
+          setDragOrder([...base]);
+        }
+      },
+      onPanResponderRelease: () => {
+        const final = dragOrderRef.current;
+        setDragId(null);
+        dragAnim.setValue(0);
+        reorderProducts(final.map((p) => p.id));
+      },
+      onPanResponderTerminate: () => {
+        setDragId(null);
+        dragAnim.setValue(0);
+        dragOrderRef.current = [...products];
+        setDragOrder([...products]);
+      },
+    });
+    panMap.current.set(itemId, pan);
+    return pan;
+  }, []);
 
 
   useEffect(() => {
@@ -80,26 +145,13 @@ export default function ProductsScreen() {
 
   const renderProductContent = useCallback(({ item }: { item: Product }) => {
     const stockColor = getStockColor(item.stock);
-    const idx = products.findIndex((p) => p.id === item.id);
+    const pan = canReorder ? getOrCreatePan(item.id) : null;
     return (
-      <View style={styles.productRow}>
-        {/* Up/Down reorder — owner only, no search */}
+      <View style={[styles.productRow, dragId === item.id && styles.productRowDragging]}>
+        {/* Drag handle — owner only, no search */}
         {canReorder && (
-          <View style={styles.reorderBtns}>
-            <TouchableOpacity
-              onPress={() => handleMove(item.id, 'up')}
-              disabled={idx === 0}
-              style={[styles.reorderBtn, idx === 0 && styles.reorderBtnDisabled]}
-            >
-              <Ionicons name="chevron-up" size={14} color={idx === 0 ? colors.text.light : colors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleMove(item.id, 'down')}
-              disabled={idx === products.length - 1}
-              style={[styles.reorderBtn, idx === products.length - 1 && styles.reorderBtnDisabled]}
-            >
-              <Ionicons name="chevron-down" size={14} color={idx === products.length - 1 ? colors.text.light : colors.text.secondary} />
-            </TouchableOpacity>
+          <View style={styles.dragHandle} {...pan?.panHandlers}>
+            <Ionicons name="reorder-three" size={22} color={colors.text.light} />
           </View>
         )}
 
@@ -169,7 +221,7 @@ export default function ProductsScreen() {
         )}
       </View>
     );
-  }, [isOwner, canReorder, categoryMap, colors, products, handleMove]);
+  }, [isOwner, canReorder, categoryMap, colors, dragId, getOrCreatePan]);
 
   // Guard: super_admin has no shop — show admin empty state
   if (!shop) {
@@ -214,20 +266,62 @@ export default function ProductsScreen() {
           />
         ) : null}
       </View>
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProductContent}
-        contentContainerStyle={styles.listContent}
-        onRefresh={() => { if (shop?.id) { fetchProducts(shop.id); fetchCategories(shop.id); } }}
-        refreshing={isLoading}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="cube-outline" size={48} color={colors.text.light} />
-            <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
-          </View>
-        }
-      />
+      {canReorder ? (
+        // ── Reorder mode: ScrollView + drag ghost ─────────────────────────
+        <View style={{ flex: 1 }} onLayout={(e) => { listTopRef.current = e.nativeEvent.layout.y; }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.listContent}
+            scrollEnabled={!dragId}
+            onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={16}
+          >
+            {dragOrder.map((item) => (
+              <View key={item.id}>
+                {renderProductContent({ item })}
+              </View>
+            ))}
+            {dragOrder.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="cube-outline" size={48} color={colors.text.light} />
+                <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
+              </View>
+            )}
+          </ScrollView>
+          {/* Floating ghost while dragging */}
+          {dragId && (() => {
+            const ghostItem = dragOrder.find((p) => p.id === dragId);
+            if (!ghostItem) return null;
+            return (
+              <Animated.View
+                style={[styles.dragGhost, {
+                  top: ghostTopRef.current,
+                  transform: [{ translateY: dragAnim }],
+                }]}
+                pointerEvents="none"
+              >
+                {renderProductContent({ item: ghostItem })}
+              </Animated.View>
+            );
+          })()}
+        </View>
+      ) : (
+        // ── Normal mode: FlatList ─────────────────────────────────────────
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={renderProductContent}
+          contentContainerStyle={styles.listContent}
+          onRefresh={() => { if (shop?.id) { fetchProducts(shop.id); fetchCategories(shop.id); } }}
+          refreshing={isLoading}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={48} color={colors.text.light} />
+              <Text style={styles.emptyText}>ยังไม่มีสินค้า</Text>
+            </View>
+          }
+        />
+      )}
       <TouchableOpacity
         style={styles.fabWrapper}
         onPress={() => { setEditingProduct(null); setFormVisible(true); }}
@@ -367,17 +461,23 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  reorderBtns: {
-    flexDirection: 'column',
+  dragHandle: {
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 4,
-    gap: 0,
   },
-  reorderBtn: {
-    padding: 4,
+  productRowDragging: {
+    opacity: 0.25,
   },
-  reorderBtnDisabled: {
-    opacity: 0.3,
+  dragGhost: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    opacity: 0.95,
+    ...shadow.lg,
+    zIndex: 999,
+    elevation: 999,
   },
   editBtn: {
     padding: 8,
